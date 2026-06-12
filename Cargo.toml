@@ -1,0 +1,27 @@
+[package]
+name = "lipi"
+version = "0.1.0"
+edition = "2024"
+description = "LIPI 2.0 — Indigenous Indian Programming Language based on Paninian Grammar"
+
+[[bin]]
+name = "lipi"
+path = "src/main.rs"
+
+[lib]
+name = "lipi"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+
+[features]
+wasm = ["wasm-bindgen"]
+
+# Interpreter hot loop benefits heavily from LTO + single codegen unit
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

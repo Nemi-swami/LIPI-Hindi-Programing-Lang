@@ -1,0 +1,5 @@
+# Benchmark — tight loop arithmetic (1,000,000 iterations)
+कुल है 0
+i के लिए 1000000 में:
+    कुल है कुल + i % 7
+बताओ कुल

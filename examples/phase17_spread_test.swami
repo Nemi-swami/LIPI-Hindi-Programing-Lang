@@ -1,0 +1,35 @@
+# Phase 17 — Spread operator in list literals: [*अ, 99, *ब]
+
+# 1. Concat of two lists
+अ है [1, 2, 3]
+ब है [4, 5]
+बताओ [*अ, *ब]
+
+# 2. Spread mixed with literal elements in the middle
+बताओ [0, *अ, 99, *ब, 100]
+
+# 3. Spread of a function-call result
+विधि दुगुनी_सूची(स):
+    नई है []
+    x के लिए स में:
+        नई है नई.जोड़ो(x * 2)
+    फल नई
+
+बताओ [*दुगुनी_सूची([1, 2, 3]), 7]
+
+# 4. Spread of an empty list
+खाली है []
+बताओ [*खाली, 1, *खाली]
+
+# 5. Nested spread literals
+बताओ [*[1, 2], *[3]]
+
+# 6. Spreading a non-list raises a catchable error
+कोशिश:
+    ग है [*5, 1]
+    बताओ "यहाँ नहीं पहुँचना चाहिए"
+पकड़ो त्रुटि:
+    बताओ "पकड़ा: " + त्रुटि
+
+# 7. Plain lists (no spread) still work unchanged
+बताओ [10, 20, 30]

@@ -1,0 +1,13 @@
+# Stack-trace demo — deliberately fails on line 4
+# (+1 on each return prevents tail-call elimination, so every frame survives)
+
+विधि गहरी(x):
+    फल x + अपरिभाषित_चर
+
+विधि बीच(x):
+    फल गहरी(x * 2) + 1
+
+विधि ऊपर(x):
+    फल बीच(x + 1) + 1
+
+बताओ ऊपर(5)

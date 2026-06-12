@@ -1,0 +1,4 @@
+/target
+/.npm-cache
+*.vsix
+*.libc

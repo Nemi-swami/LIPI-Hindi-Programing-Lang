@@ -1,0 +1,89 @@
+# Phase 17 — Default parameters (डिफ़ॉल्ट मान)
+
+। 1. simple default — call with and without ।
+विधि नमस्ते(नाम="दुनिया"):
+    फल "नमस्ते " + नाम + "!"
+
+जाँचो नमस्ते() बराबर "नमस्ते दुनिया!", "default string"
+जाँचो नमस्ते("राम") बराबर "नमस्ते राम!", "override default"
+बताओ "1. simple default ✓"
+
+। 2. mixed required + defaults ।
+विधि शक्ति(आधार, घातांक_मान=2, गुणा=1):
+    फल घात(आधार, घातांक_मान) * गुणा
+
+जाँचो शक्ति(3) बराबर 9, "one default used"
+जाँचो शक्ति(2, 10) बराबर 1024, "first default overridden"
+जाँचो शक्ति(2, 3, 5) बराबर 40, "all provided"
+बताओ "2. mixed params ✓"
+
+। 3. negative + bool defaults ।
+विधि समायोजन(मान, अंतर=-5):
+    फल मान + अंतर
+
+जाँचो समायोजन(20) बराबर 15, "negative default"
+
+विधि झंडा(चालू=सत्य):
+    यदि चालू:
+        फल "हाँ"
+    फल "नहीं"
+
+जाँचो झंडा() बराबर "हाँ", "bool default"
+जाँचो झंडा(असत्य) बराबर "नहीं", "bool override"
+बताओ "3. negative + bool defaults ✓"
+
+। 4. default + vararg together ।
+विधि योग_आधार(आधार=100, *बाकी):
+    कुल है आधार
+    i के लिए बाकी में:
+        कुल है कुल + i
+    फल कुल
+
+जाँचो योग_आधार() बराबर 100, "vararg empty + default"
+जाँचो योग_आधार(10, 1, 2, 3) बराबर 16, "vararg + provided base"
+बताओ "4. default + vararg ✓"
+
+। 5. class methods with defaults ।
+वर्ग खाता:
+    विधि बनाओ(मालिक, शेष=0):
+        यह.मालिक है मालिक
+        यह.शेष है शेष
+    विधि जमा(राशि=100):
+        यह.शेष है यह.शेष + राशि
+        फल यह.शेष
+
+क है खाता("राम")
+जाँचो क.शेष बराबर 0, "constructor default"
+ख है खाता("श्याम", 500)
+जाँचो ख.शेष बराबर 500, "constructor override"
+बताओ "5. class defaults ✓"
+
+। 6. inherited constructor with default ।
+वर्ग बचत_खाता(खाता):
+    विधि ब्याज():
+        फल यह.शेष * 0.05
+
+ग है बचत_खाता("गीता")
+जाँचो ग.शेष बराबर 0, "inherited constructor default"
+बताओ "6. inheritance ✓"
+
+। 7. function-as-value keeps defaults ।
+विधि दुगुना_जोड़(x, y=10):
+    फल x * 2 + y
+
+f है दुगुना_जोड़
+जाँचो f(5) बराबर 20, "closure call uses default"
+जाँचो f(5, 0) बराबर 10, "closure call override"
+बताओ "7. first-class function defaults ✓"
+
+। 8. tail call into defaulted function ।
+विधि गिनती(न, कुल=0):
+    यदि न बराबर 0:
+        फल कुल
+    फल गिनती(न - 1, कुल + न)
+
+जाँचो गिनती(100) बराबर 5050, "tail call with default start"
+बताओ "8. tail call ✓"
+
+बताओ ""
+बताओ "Phase 17 default parameters: सभी परीक्षण सफल!"

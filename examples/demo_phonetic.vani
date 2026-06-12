@@ -1,0 +1,41 @@
+# Phonetic demo — no Devanagari keyboard needed!
+# Keywords like batao/hai/yadi convert automatically.
+# Variable names also convert: naam → नाम, ginti → गिन्ति
+
+batao "=== LIPI Phonetic (.vani) Demo ==="
+
+# Basic variables — typed phonetically, become Devanagari identifiers
+naam hai "Arjun"
+aayu hai 25
+batao naam
+batao aayu
+
+# Arithmetic
+yog hai 15 + 27
+batao yog
+
+# Conditionals
+yadi aayu se adhik 18:
+    batao "Balig hai"
+anyatha:
+    batao "Chhota hai"
+
+# Loop with phonetic counter variable
+ginti hai 1
+jab tak ginti se kam 4:
+    batao ginti
+    ginti hai ginti + 1
+
+# Function with phonetic name
+vidhi vargfal(sankhya):
+    phal sankhya * sankhya
+
+batao vargfal(7)
+batao vargfal(12)
+
+# List with phonetic variable
+phal_suchi hai ["seb", "kela", "aam"]
+i ke liye phal_suchi mein:
+    batao i
+
+batao "=== Sab theek! ==="

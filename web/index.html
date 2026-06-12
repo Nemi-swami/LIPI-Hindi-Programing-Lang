@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LIPI Editor</title>
+<style>
+:root {
+  --bg:      #1e1e1e;
+  --panel:   #252526;
+  --bar:     #333333;
+  --border:  #454545;
+  --accent:  #f78166;
+  --text:    #d4d4d4;
+  --muted:   #858585;
+  --green:   #4ec9b0;
+  --yellow:  #d7ba7d;
+  --blue:    #007acc;
+  --err:     #f48771;
+  --lnum:    #858585;
+  --input-c: #b5cea8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
+     display:flex;flex-direction:column;height:100vh}
+
+/* ── Menubar ── */
+.mbar{display:flex;align-items:center;background:var(--bar);height:32px;
+      padding:0 8px;gap:2px;border-bottom:1px solid #111;flex-shrink:0;user-select:none}
+.logo{font-weight:700;color:var(--accent);font-size:.95rem;letter-spacing:-1px;margin-right:8px}
+.mbtn{background:transparent;border:none;color:var(--text);padding:0 10px;
+      font-size:.82rem;cursor:pointer;height:32px}
+.mbtn:hover,.mbtn.on{background:rgba(255,255,255,.12)}
+.mi{position:relative}
+.dd{display:none;position:absolute;top:100%;left:0;background:#2d2d2d;
+    border:1px solid #555;min-width:210px;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:200}
+.dd.show{display:block}
+.di{display:flex;align-items:center;justify-content:space-between;
+    padding:6px 14px 6px 10px;font-size:.82rem;cursor:pointer;gap:16px;white-space:nowrap}
+.di:hover{background:#094771}
+.di .k{color:var(--muted);font-size:.76rem}
+.ds{height:1px;background:var(--border);margin:3px 0}
+.dck{width:16px;display:inline-block;color:var(--green)}
+.fname-area{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:.82rem}
+#fname{color:var(--text)}
+#mdot{color:var(--yellow);display:none}
+.pill{padding:1px 8px;border-radius:10px;font-size:.72rem;
+      background:rgba(0,0,0,.3);border:1px solid var(--border);color:var(--muted);margin-left:8px}
+.pill.ok{background:rgba(78,201,176,.15);border-color:rgba(78,201,176,.4);color:var(--green)}
+.pill.er{background:rgba(244,135,113,.15);border-color:rgba(244,135,113,.4);color:var(--err)}
+
+/* ── Layout ── */
+.main{flex:1;display:flex;min-height:0;overflow:hidden}
+
+/* Editor left */
+.eleft{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.ed-wrap{flex:1;display:flex;min-height:0;overflow:hidden;position:relative}
+.lnums{width:48px;padding:14px 0 14px 0;background:#1e1e1e;border-right:1px solid var(--border);
+       font-family:'Cascadia Code',Consolas,monospace;font-size:14px;line-height:1.6;
+       color:var(--lnum);text-align:right;overflow:hidden;flex-shrink:0;user-select:none}
+.lnums span{display:block;padding-right:8px}
+#code{flex:1;padding:14px 14px;background:#1e1e1e;color:var(--text);
+      font-family:'Cascadia Code',Consolas,'Courier New',monospace;
+      font-size:14px;line-height:1.6;border:none;resize:none;outline:none;
+      tab-size:4;overflow-y:auto;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+#code::placeholder{color:#3c3c3c}
+#code::selection{background:#264f78}
+
+/* Splitter */
+.spl{width:5px;background:var(--border);cursor:col-resize;flex-shrink:0}
+.spl:hover,.spl.drag{background:var(--blue)}
+
+/* Right panel */
+.rside{display:flex;flex-direction:column;width:38%;min-width:180px;overflow:hidden}
+.ptitle{display:flex;align-items:center;justify-content:space-between;
+        padding:5px 10px;background:var(--panel);border-bottom:1px solid var(--border);
+        font-size:.73rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0}
+.ptitle button{background:transparent;border:none;color:var(--muted);
+               font-size:.73rem;cursor:pointer;padding:2px 6px;border-radius:3px}
+.ptitle button:hover{color:var(--text);background:rgba(255,255,255,.1)}
+#output{flex:1;padding:12px 14px;font-family:'Cascadia Code',Consolas,monospace;
+        font-size:.87rem;line-height:1.7;overflow-y:auto;white-space:pre-wrap;
+        word-break:break-word;min-height:0}
+.ph{color:var(--muted);font-style:italic}
+.er{color:var(--err)}
+.in-title{border-top:1px solid var(--border);flex-shrink:0}
+#stdin{height:120px;width:100%;padding:10px 14px;
+       font-family:'Cascadia Code',Consolas,monospace;font-size:.85rem;line-height:1.65;
+       background:#141414;color:var(--input-c);border:none;resize:none;outline:none}
+#stdin::placeholder{color:#383838}
+
+/* ── Status bar ── */
+.sbar{height:22px;background:var(--blue);display:flex;align-items:center;
+      padding:0 12px;font-size:.73rem;color:rgba(255,255,255,.92);
+      gap:14px;flex-shrink:0;user-select:none}
+.sbar .r{margin-left:auto;display:flex;gap:12px;align-items:center}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
+.dot.er{background:var(--err)}.dot.busy{background:var(--yellow)}
+#artoggle{cursor:pointer;background:rgba(255,255,255,.18);border:none;
+          color:rgba(255,255,255,.9);font-size:.71rem;padding:1px 7px;border-radius:3px}
+#artoggle:hover{background:rgba(255,255,255,.28)}
+#artoggle.off{background:rgba(255,255,255,.08);opacity:.7}
+
+/* ── FAB ── */
+#fab{position:fixed;bottom:34px;right:20px;width:50px;height:50px;border-radius:50%;
+     background:#238636;color:#fff;border:none;font-size:1.2rem;cursor:pointer;
+     box-shadow:0 4px 14px rgba(0,0,0,.55);display:flex;align-items:center;
+     justify-content:center;transition:background .15s,transform .1s;z-index:100}
+#fab:hover:not(:disabled){background:#2ea043;transform:scale(1.07)}
+#fab:disabled{opacity:.35;cursor:default;transform:none}
+
+/* overlay */
+#ov{display:none;position:fixed;inset:0;z-index:150}
+#ov.on{display:block}
+</style>
+</head>
+<body>
+
+<div id="ov"></div>
+
+<!-- ══ Menubar ══════════════════════════════════════════════════ -->
+<div class="mbar">
+  <span class="logo">LIPI</span>
+
+  <div class="mi">
+    <button class="mbtn" id="bfile">File</button>
+    <div class="dd" id="ddfile">
+      <div class="di" id="cnew">  <span>New</span>     <span class="k">Ctrl+N</span></div>
+      <div class="di" id="copen"> <span>Open .swami…</span><span class="k">Ctrl+O</span></div>
+      <div class="ds"></div>
+      <div class="di" id="csave"> <span>Save</span>    <span class="k">Ctrl+S</span></div>
+      <div class="di" id="csaveas"><span>Save As…</span><span class="k">Ctrl+Shift+S</span></div>
+    </div>
+  </div>
+
+  <div class="mi">
+    <button class="mbtn" id="brun">Run</button>
+    <div class="dd" id="ddrun">
+      <div class="di" id="crun">    <span>▶ Run</span>            <span class="k">Ctrl+Enter</span></div>
+      <div class="ds"></div>
+      <div class="di" id="cautorun"><span><span class="dck" id="arck">✓</span> Auto-run on Save</span></div>
+    </div>
+  </div>
+
+  <div class="fname-area">
+    <span id="fname">untitled.swami</span>
+    <span id="mdot">●</span>
+  </div>
+  <div class="pill" id="wpill">⟳ Loading WASM</div>
+</div>
+
+<!-- ══ Main ════════════════════════════════════════════════════ -->
+<div class="main">
+  <!-- Editor -->
+  <div class="eleft">
+    <div class="ed-wrap">
+      <div class="lnums" id="lnums"><span>1</span></div>
+      <textarea id="code" spellcheck="false" autocomplete="off"
+        placeholder="। LIPI कोड यहाँ लिखें ।"></textarea>
+    </div>
+  </div>
+
+  <div class="spl" id="spl"></div>
+
+  <!-- Output + Input -->
+  <div class="rside" id="rside">
+    <div class="ptitle">
+      <span>OUTPUT</span>
+      <button id="bclrout">Clear</button>
+    </div>
+    <pre id="output"><span class="ph">▶ Run to see output here.</span></pre>
+
+    <div class="ptitle in-title">
+      <span>INPUT <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">— पढ़ो() reads each line</span></span>
+      <button id="bclrin">Clear</button>
+    </div>
+    <textarea id="stdin" spellcheck="false"
+      placeholder="One input per line.&#10;Each पढ़ो() reads next line.&#10;&#10;For calculator example:&#10;42&#10;+&#10;8"></textarea>
+  </div>
+</div>
+
+<!-- ══ Status bar ═══════════════════════════════════════════════ -->
+<div class="sbar">
+  <span class="dot" id="sdot"></span>
+  <span id="stxt">Initializing…</span>
+  <div class="r">
+    <span id="cur">Ln 1, Col 1</span>
+    <button id="artoggle">⚡ Auto-run: ON</button>
+  </div>
+</div>
+
+<button id="fab" disabled>▶</button>
+
+<script type="module">
+import init, * as WasmMod from './pkg/lipi.js?v=3';
+const run_source = (...a) => WasmMod.run_source(...a);
+const set_stdin  = (...a) => WasmMod.set_stdin  ? WasmMod.set_stdin(...a)  : undefined;
+
+// ── State ──────────────────────────────────────────────────────
+let wasmReady = false, fileHandle = null;
+let fileName = 'untitled.swami', autoRun = true, modified = false;
+
+// ── DOM ────────────────────────────────────────────────────────
+const G = id => document.getElementById(id);
+const codeEl = G('code'), outputEl = G('output');
+const stdinEl = G('stdin'), lnumsEl = G('lnums');
+const fnameEl = G('fname'), mdotEl = G('mdot');
+const wpill = G('wpill'), fab = G('fab');
+const sdot = G('sdot'), stxt = G('stxt'), curEl = G('cur');
+const artoggle = G('artoggle'), arck = G('arck'), ov = G('ov');
+
+// ── Line numbers ───────────────────────────────────────────────
+function updateLineNums() {
+  const lines = codeEl.value.split('\n').length;
+  const cur = lnumsEl.children.length;
+  if (lines > cur) {
+    for (let i = cur + 1; i <= lines; i++) {
+      const s = document.createElement('span');
+      s.textContent = i;
+      lnumsEl.appendChild(s);
+    }
+  } else if (lines < cur) {
+    while (lnumsEl.children.length > lines) lnumsEl.lastChild.remove();
+  }
+  // Sync scroll
+  lnumsEl.scrollTop = codeEl.scrollTop;
+}
+codeEl.addEventListener('input',  () => { updateLineNums(); setMod(true); });
+codeEl.addEventListener('scroll', () => { lnumsEl.scrollTop = codeEl.scrollTop; });
+
+// Cursor position
+codeEl.addEventListener('keyup',   updateCursor);
+codeEl.addEventListener('click',   updateCursor);
+function updateCursor() {
+  const txt = codeEl.value.substring(0, codeEl.selectionStart);
+  const lines = txt.split('\n');
+  curEl.textContent = `Ln ${lines.length}, Col ${lines[lines.length-1].length + 1}`;
+}
+
+// Tab key → 4 spaces
+codeEl.addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = codeEl.selectionStart, en = codeEl.selectionEnd;
+    codeEl.value = codeEl.value.slice(0, s) + '    ' + codeEl.value.slice(en);
+    codeEl.selectionStart = codeEl.selectionEnd = s + 4;
+    updateLineNums(); setMod(true);
+  }
+  if ((e.ctrlKey||e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+  if ((e.ctrlKey||e.metaKey) && !e.shiftKey && e.key === 's') { e.preventDefault(); save(); }
+  if ((e.ctrlKey||e.metaKey) && e.shiftKey && e.key === 'S') { e.preventDefault(); saveAs(); }
+  if ((e.ctrlKey||e.metaKey) && e.key === 'o') { e.preventDefault(); openFile(); }
+  if ((e.ctrlKey||e.metaKey) && e.key === 'n') { e.preventDefault(); newFile(); }
+});
+
+// ── WASM ───────────────────────────────────────────────────────
+async function boot() {
+  try {
+    await init();
+    wasmReady = true;
+    wpill.textContent = '⚡ WASM Ready'; wpill.className = 'pill ok';
+    setStatus('Ready', false); fab.disabled = false;
+  } catch(e) {
+    wpill.textContent = '✖ WASM Failed'; wpill.className = 'pill er';
+    setStatus('WASM failed: ' + e.message, true);
+  }
+}
+
+// ── Run ────────────────────────────────────────────────────────
+function run() {
+  if (!wasmReady) return;
+  setStatus('Running…', false); sdot.className = 'dot busy';
+  set_stdin(stdinEl.value);
+  setTimeout(() => {
+    try {
+      const res = run_source(codeEl.value);
+      const isErr = /^(LVM|व्याकरण) त्रुटि:/.test(res);
+      outputEl.innerHTML = '';
+      if (!res.trim()) {
+        outputEl.innerHTML = '<span class="ph">(No output)</span>';
+      } else if (isErr) {
+        const s = document.createElement('span');
+        s.className = 'er'; s.textContent = res; outputEl.appendChild(s);
+      } else {
+        outputEl.textContent = res;
+      }
+      setStatus(isErr ? '✖ Error' : '✔ Done', isErr);
+    } catch(e) {
+      outputEl.innerHTML = `<span class="er">Error: ${e.message}</span>`;
+      setStatus('✖ Error', true);
+    }
+  }, 0);
+}
+
+// ── File ops ───────────────────────────────────────────────────
+const OPTS = { types:[{ description:'LIPI Source', accept:{'text/plain':['.swami']} }] };
+
+async function newFile() {
+  if (modified && !confirm('Unsaved changes will be lost. Continue?')) return;
+  fileHandle = null; fileName = 'untitled.swami';
+  codeEl.value = '। नई LIPI फ़ाइल ।\n\nबताओ "नमस्ते!"';
+  updateLineNums(); setMod(false); updateTitle();
+}
+
+async function openFile() {
+  if (!window.showOpenFilePicker) { legacyOpen(); return; }
+  try {
+    [fileHandle] = await window.showOpenFilePicker({ ...OPTS, multiple: false });
+    const f = await fileHandle.getFile();
+    codeEl.value = await f.text();
+    fileName = f.name;
+    updateLineNums(); setMod(false); updateTitle();
+    setStatus('Opened: ' + fileName, false);
+  } catch(e) { if (e.name !== 'AbortError') setStatus('Open failed: ' + e.message, true); }
+}
+
+async function save() {
+  if (fileHandle) { await writeTo(fileHandle); if (autoRun) run(); }
+  else { await saveAs(); }
+}
+
+async function saveAs() {
+  if (!window.showSaveFilePicker) { legacySave(); return; }
+  try {
+    fileHandle = await window.showSaveFilePicker({ ...OPTS, suggestedName: fileName });
+    fileName = (await fileHandle.getFile()).name;
+    await writeTo(fileHandle); updateTitle(); if (autoRun) run();
+  } catch(e) { if (e.name !== 'AbortError') setStatus('Save failed: ' + e.message, true); }
+}
+
+async function writeTo(h) {
+  try {
+    const w = await h.createWritable();
+    await w.write(codeEl.value); await w.close();
+    setMod(false); setStatus('Saved — ' + fileName, false);
+  } catch(e) { setStatus('Write error: ' + e.message, true); }
+}
+
+function legacyOpen() {
+  const inp = Object.assign(document.createElement('input'), { type:'file', accept:'.swami' });
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    fileName = f.name; codeEl.value = await f.text();
+    updateLineNums(); setMod(false); updateTitle();
+    setStatus('Opened: ' + fileName, false);
+  };
+  inp.click();
+}
+function legacySave() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([codeEl.value], { type:'text/plain' }));
+  a.download = fileName; a.click();
+  setMod(false); setStatus('Downloaded — ' + fileName, false);
+  if (autoRun) run();
+}
+
+// ── UI helpers ─────────────────────────────────────────────────
+function setStatus(msg, isErr) {
+  stxt.textContent = msg;
+  sdot.className = 'dot' + (isErr ? ' er' : '');
+}
+function setMod(v) {
+  modified = v; mdotEl.style.display = v ? 'inline' : 'none';
+}
+function updateTitle() {
+  fnameEl.textContent = fileName; document.title = 'LIPI — ' + fileName;
+}
+
+// ── Menus ──────────────────────────────────────────────────────
+function openDD(id, btn) {
+  const dd = G(id), was = dd.classList.contains('show');
+  closeDD(); if (!was) { dd.classList.add('show'); btn.classList.add('on'); ov.classList.add('on'); }
+}
+function closeDD() {
+  document.querySelectorAll('.dd').forEach(d => d.classList.remove('show'));
+  document.querySelectorAll('.mbtn').forEach(b => b.classList.remove('on'));
+  ov.classList.remove('on');
+}
+G('bfile').onclick = e => { e.stopPropagation(); openDD('ddfile', e.currentTarget); };
+G('brun').onclick  = e => { e.stopPropagation(); openDD('ddrun',  e.currentTarget); };
+ov.onclick = closeDD;
+
+function mc(id, fn) { G(id).onclick = () => { closeDD(); fn(); }; }
+mc('cnew', newFile); mc('copen', openFile); mc('csave', save); mc('csaveas', saveAs); mc('crun', run);
+
+G('cautorun').onclick = () => {
+  autoRun = !autoRun;
+  arck.textContent = autoRun ? '✓' : ' ';
+  artoggle.textContent = `⚡ Auto-run: ${autoRun ? 'ON' : 'OFF'}`;
+  artoggle.classList.toggle('off', !autoRun);
+};
+fab.onclick = run;
+artoggle.onclick = () => G('cautorun').click();
+G('bclrout').onclick = () => { outputEl.innerHTML = '<span class="ph">▶ Run to see output here.</span>'; };
+G('bclrin').onclick  = () => { stdinEl.value = ''; };
+
+// Global shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDD();
+});
+
+// ── Splitter drag ──────────────────────────────────────────────
+const spl = G('spl'), rside = G('rside');
+let drag = false;
+spl.addEventListener('mousedown', e => { drag = true; spl.classList.add('drag'); e.preventDefault(); });
+document.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const r = document.querySelector('.main').getBoundingClientRect();
+  rside.style.width = Math.max(180, Math.min(r.width - 200, r.right - e.clientX)) + 'px';
+});
+document.addEventListener('mouseup', () => { drag = false; spl.classList.remove('drag'); });
+
+// ── Default code & boot ────────────────────────────────────────
+codeEl.value =
+`। LIPI Editor — Ctrl+S save+run | Ctrl+O open | Ctrl+N new ।
+
+नाम है "भारत"
+बताओ "नमस्ते, " + नाम + "!"
+
+। function ।
+विधि जोड़ो(अ, ब):
+    फल अ + ब
+
+बताओ "3 + 4 = " + वाक्य(जोड़ो(3, 4))
+
+। loop ।
+3 बार करो:
+    बताओ "जय हिंद!"
+
+। math ।
+बताओ "√144 = " + वाक्य(वर्गमूल(144))
+बताओ "2^10 = " + वाक्य(घात(2, 10))`;
+
+updateLineNums();
+boot();
+</script>
+</body>
+</html>

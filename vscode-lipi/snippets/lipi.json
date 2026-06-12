@@ -1,0 +1,95 @@
+{
+  "विधि (function)": {
+    "prefix": ["विधि", "vidhi", "func"],
+    "body": [
+      "विधि ${1:नाम}(${2:अ, ब}):",
+      "    ${3:फल $2}"
+    ],
+    "description": "Function definition — विधि नाम(params): … फल"
+  },
+  "यदि / अन्यथा (if/else)": {
+    "prefix": ["यदि", "yadi", "if"],
+    "body": [
+      "यदि ${1:क} ${2|से अधिक,से कम,बराबर|} ${3:10}:",
+      "    ${4:बताओ \"हाँ\"}",
+      "अन्यथा:",
+      "    ${5:बताओ \"नहीं\"}"
+    ],
+    "description": "If/else conditional — यदि … अन्यथा"
+  },
+  "जब तक (while loop)": {
+    "prefix": ["जब तक", "jabtak", "while"],
+    "body": [
+      "जब तक ${1:क} ${2|से कम,से अधिक,बराबर|} ${3:10}:",
+      "    ${4:क है क + 1}"
+    ],
+    "description": "While loop — जब तक condition:"
+  },
+  "के लिए (for loop)": {
+    "prefix": ["के लिए", "keliye", "for"],
+    "body": [
+      "${1:i} के लिए ${2:10} में:",
+      "    ${3:बताओ $1}"
+    ],
+    "description": "For loop over range/list/string — i के लिए iterable में:"
+  },
+  "बार करो (repeat N times)": {
+    "prefix": ["बार करो", "barkaro", "repeat"],
+    "body": [
+      "${1:5} बार करो:",
+      "    ${2:बताओ \"लूप\"}"
+    ],
+    "description": "Repeat N times — n बार करो:"
+  },
+  "वर्ग (class with constructor)": {
+    "prefix": ["वर्ग", "varg", "class"],
+    "body": [
+      "वर्ग ${1:व्यक्ति}:",
+      "    विधि बनाओ(${2:नाम}):",
+      "        यह.$2 है $2",
+      "    विधि ${3:परिचय}():",
+      "        बताओ यह.$2"
+    ],
+    "description": "Class with बनाओ constructor and a method"
+  },
+  "कोशिश / पकड़ो (try/catch)": {
+    "prefix": ["कोशिश", "koshish", "try"],
+    "body": [
+      "कोशिश:",
+      "    ${1:क है पूर्णांक(\"abc\")}",
+      "पकड़ो त्रुटि:",
+      "    बताओ \"त्रुटि: \" + त्रुटि"
+    ],
+    "description": "Try/catch error handling — कोशिश … पकड़ो त्रुटि"
+  },
+  "विकल्प + मिलाओ (enum + match)": {
+    "prefix": ["विकल्प", "vikalp", "enum"],
+    "body": [
+      "विकल्प ${1:रंग}:",
+      "    ${2:लाल}",
+      "    ${3:हरा}",
+      "",
+      "${4:मेरा} है $1.$2",
+      "मिलाओ $4:",
+      "    $2:",
+      "        बताओ \"$2\"",
+      "    अन्यथा:",
+      "        बताओ \"अन्य\""
+    ],
+    "description": "Enum definition with pattern match — विकल्प … मिलाओ"
+  },
+  "लाम्डा (lambda)": {
+    "prefix": ["लाम्डा", "lambda"],
+    "body": [
+      "${1:दुगुना} है लाम्डा(${2:x}): ${3:$2 * 2}"
+    ],
+    "description": "Lambda expression — name है लाम्डा(x): expr"
+  },
+  "बताओ (print)": {
+    "prefix": ["बताओ", "batao", "print"],
+    "body": [
+      "बताओ ${1:\"नमस्ते\"}"
+    ],
+    "description": "Print with newline"
+  }
+}

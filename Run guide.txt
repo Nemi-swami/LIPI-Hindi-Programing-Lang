@@ -1,0 +1,179 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  LIPI — How to Run (Phase 16 Edition)
+  भारत की पहली स्वदेशी प्रोग्रामिंग भाषा
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SETUP (first time only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Open PowerShell and run:
+
+    $env:RUSTUP_HOME = "D:\Rust\rustup"
+    $env:CARGO_HOME  = "D:\Rust\cargo"
+    $env:PATH = "D:\Rust\cargo\bin;D:\msys64\mingw64\bin;$env:PATH"
+    cd D:\Projects\lipi-lang
+    cargo build --target x86_64-pc-windows-gnu
+
+  Binary after build:
+    target\x86_64-pc-windows-gnu\debug\lipi.exe
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3 WAYS TO WRITE LIPI CODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Option 1 — Devanagari (.swami)  ← full power
+    File: hello.swami
+      बताओ "नमस्ते दुनिया!"
+    Run:  lipi hello.swami
+
+  Option 2 — Roman keywords (.roman)  ← no Hindi keyboard for keywords
+    File: hello.roman
+      batao "नमस्ते दुनिया!"
+      naam hai "Arjun"
+      batao naam
+    Run:  lipi hello.roman
+
+  Option 3 — Full Phonetic (.vani)  ← no Hindi keyboard at ALL
+    File: hello.vani
+      batao "Namaste!"
+      naam hai "Arjun"
+      aayu hai 25
+      batao naam
+      batao aayu
+    Run:  lipi hello.vani
+    (naam → नाम, aayu → आयु automatically)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ALL COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  lipi foo.swami              Run Devanagari source
+  lipi foo.roman              Run Roman-keyword source
+  lipi foo.vani               Run full phonetic source
+
+  lipi build foo.swami        Compile → foo.libc
+  lipi run   foo.libc         Run compiled bytecode
+
+  lipi edit  foo.swami        Open built-in terminal editor
+  lipi                        Start REPL (interactive mode)
+
+  lipi roman-show foo.roman   Preview Roman→Devanagari translation
+  lipi phonetic-show foo.vani Preview phonetic→Devanagari translation
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  READY EXAMPLES (try these now)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  lipi examples\demo_full.swami          Full language demo
+  lipi examples\demo_roman.roman         Roman QWERTY demo
+  lipi examples\demo_phonetic.vani       Phonetic (.vani) demo
+  lipi examples\phase16_test.swami       Phase 16 features
+  lipi examples\new_modules_test.swami   All stdlib modules
+
+  Double-click play.bat                  Browser playground
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHONETIC (.vani) VOWEL CHART
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  a   → अ    aa  → आ    i   → इ    ee/ii → ई
+  u   → उ    oo/uu → ऊ  e   → ए    ai    → ऐ
+  o   → ओ    au/ou → औ  ri  → ऋ
+
+  After a consonant, these become vowel matras:
+    raam → राम   naam → नाम   shree → श्री   Om → ओम
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PHONETIC (.vani) CONSONANT CHART
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  k→क   kh→ख   g→ग   gh→घ   ng→ङ
+  ch→च  chh→छ  j→ज   jh→झ   ny→ञ
+  t→त   th→थ   d→द   dh→ध   n→न
+  p→प   ph/f→फ b→ब   bh→भ   m→म
+  y→य   r→र    l→ल   v/w→व  s→स
+  sh→श  ssh→ष  h→ह
+  ksh/x→क्ष   gy→ज्ञ
+
+  Retroflex (double letter):
+  tt→ट  tth→ठ  dd→ड  ddh→ढ  nn→ण
+
+  KEY RULE: two consecutive consonants get a halant (्) between them.
+  To separate them with inherent 'a', write 'a' explicitly:
+    vargphal  → वर्ग्फल  (halant)
+    vargaphal → वर्गफल   (explicit a, no halant) ✓
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ROMAN KEYWORD MAP (.roman files)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  batao    → बताओ     likho    → लिखो
+  hai      → है       yadi     → यदि
+  anyatha  → अन्यथा  vidhi    → विधि
+  phal     → फल       aur      → और
+  ya       → या       nahin    → नहीं
+  jab tak  → जब तक   ke liye  → के लिए
+  bar karo → बार करो  band karo→ बंद करो
+  se adhik → से अधिक se kam   → से कम
+  barabar  → बराबर    satya    → सत्य
+  asatya   → असत्य    lamda    → लाम्डा
+  koshish  → कोशिश   pakdo    → पकड़ो
+  truti    → त्रुटि   varg     → वर्ग
+  suchi    → सूची     kosh     → कोश
+  swaroop  → स्वरूप   pai      → पाई
+  jancho   → जाँचो    sthir    → स्थिर
+  shuddha  → शुद्ध
+  bharat.ganit    → भारत.गणित
+  bharat.vyakaran → भारत.व्याकरण
+  bharat.vigyan   → भारत.विज्ञान
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  QUICK SYNTAX REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  क है 10              variable = 10
+  बताओ क               print with newline
+  लिखो "नाम: "         print WITHOUT newline
+
+  यदि क से अधिक 5:    if k > 5
+      बताओ "बड़ा"
+  अन्यथा:
+      बताओ "छोटा"
+
+  5 बार करो:           repeat 5 times
+      बताओ "लूप"
+
+  i के लिए 10 में:     for i in 0..9
+      बताओ i
+
+  आइटम के लिए सूची में:  for item in list
+      बताओ आइटम
+
+  जब तक क से कम 10:   while k < 10
+      क है क + 1
+
+  विधि जोड़ो(अ, ब):    function definition
+      फल अ + ब
+  बताओ जोड़ो(3, 4)     → 7
+
+  वर्ग व्यक्ति:        class
+      विधि बनाओ(नाम):
+          यह.नाम है नाम
+
+  कोशिश:               try / catch
+      ...
+  पकड़ो त्रुटि:
+      बताओ त्रुटि
+
+  स्थिर पाई है 3.14    immutable constant
+  जाँचो क से अधिक 0, "positive!"  assert
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

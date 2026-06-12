@@ -1,0 +1,14 @@
+# Runaway recursion — must halt with a clean depth-limit error, not a crash
+# (+0 trick prevents tail-call elimination so frames really accumulate)
+
+विधि अनंत_लूप(n):
+    फल अनंत_लूप(n + 1) + 0
+
+# Also verify the error is catchable
+कोशिश:
+    अनंत_लूप(0)
+पकड़ो त्रुटि:
+    बताओ "पकड़ा गया: " + त्रुटि[0:30]
+
+# And uncaught: shows capped trace
+अनंत_लूप(0)
