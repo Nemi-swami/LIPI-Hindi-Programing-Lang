@@ -1392,6 +1392,15 @@ Test file: `examples/phase16_test.swami` — all assertions pass.
   - Lexer पढ़ो/पकड़ो nukta rules now exact-match codepoint sequences — the old
     loose contains-check swallowed identifiers like `पथ_जोड़ो` (became stdin read!)
 
+- **Named format placeholders** — `{नाम:.2}` in interpolated strings (2026-06-13)
+  - `"पाई = {मूल्य:.4}"`, `"{राशि:₹}"`, `"{दर:%}"`, `"{कोड:06}"`, `"{राशि:,}"` —
+    variable (or `obj.field`) + any स्वरूप spec, in ANY string literal
+  - Parser-only desugar in `parse_fmt_string`: `{target:spec}` → `स्वरूप("{:spec}", target)`
+    spliced into the existing concat chain — no new opcodes, .libc untouched
+  - Spec must start with digit/`.`/`%`/`,`/`₹` — JSON text and times like `"10:30"`
+    stay literal; positional `{:spec}` for स्वरूप() unchanged
+  - Test: `examples/phase17_namedspec_test.swami`
+
 ## Phase 17 — NEXT: possible directions
 
 1. **Module system** — `आयात "file.swami" as नाम` with namespace access

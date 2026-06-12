@@ -5,17 +5,41 @@ use crate::ast::*;
 use crate::karaka::Karaka;
 
 // ── String interpolation helper ────────────────────────────────────────────────
-fn fmt_part_expr(inner: &str) -> Expr {
+fn fmt_target_expr(inner: &str) -> Expr {
     let s = inner.trim();
     // Support obj.field inside {}
-    let base = if let Some(dot) = s.find('.') {
+    if let Some(dot) = s.find('.') {
         let obj   = s[..dot].trim().to_string();
         let field = s[dot+1..].trim().to_string();
         Expr::Attr { obj: Box::new(Expr::Ident(obj)), field }
     } else {
         Expr::Ident(s.to_string())
-    };
-    Expr::Call { name: "वाक्य".to_string(), args: vec![base] }
+    }
+}
+
+fn fmt_part_expr(inner: &str) -> Expr {
+    Expr::Call { name: "वाक्य".to_string(), args: vec![fmt_target_expr(inner)] }
+}
+
+/// Named placeholder with a format spec: `{नाम:.2}` desugars to स्वरूप("{:.2}", नाम).
+/// The spec must start with a character that can begin a स्वरूप spec
+/// (digit, '.', '%', ',', '₹') so colon-bearing literal text (JSON, times
+/// like "10:30") stays literal.
+fn named_spec_expr(inner: &str) -> Option<Expr> {
+    let (target, spec) = inner.split_once(':')?;
+    let target = target.trim();
+    let spec = spec.trim();
+    if !is_interp_target(target) || spec.is_empty() {
+        return None;
+    }
+    let first = spec.chars().next().unwrap();
+    if !(first.is_ascii_digit() || first == '.' || first == '%' || first == ',' || first == '₹') {
+        return None;
+    }
+    Some(Expr::Call {
+        name: "स्वरूप".to_string(),
+        args: vec![Expr::Str(format!("{{:{spec}}}")), fmt_target_expr(target)],
+    })
 }
 
 /// A `{...}` interior is interpolated only if it's a plain identifier —
@@ -46,6 +70,9 @@ fn parse_fmt_string(s: &str) -> Expr {
             let inner = &after[..close];
             if is_interp_target(inner.trim()) {
                 parts.push(fmt_part_expr(inner));
+            } else if let Some(e) = named_spec_expr(inner.trim()) {
+                // {नाम:.2} — named placeholder with format spec
+                parts.push(e);
             } else {
                 // {} / {:spec} placeholders for स्वरूप(), or non-identifier
                 // text (e.g. JSON) — keep as literal
