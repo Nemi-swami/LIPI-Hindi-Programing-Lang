@@ -21,6 +21,27 @@ pub fn set_stdin_buffer(lines: Vec<String>) {
 use crate::karaka::KarakaEnv;
 use crate::opcode::{CompiledProgram, FuncDef, LvmValue, Opcode};
 
+// ── Memory guards (Phase 17C) ───────────────────────────────────────────────────
+// Generous ceilings so a runaway program halts with a catchable Hindi error
+// instead of OOM-killing the process. Normal programs stay far below these.
+
+/// Maximum number of elements any single list may hold.
+const MAX_LIST_LEN: usize = 50_000_000;
+/// Maximum operand-stack depth — guards against runaway push loops / deep nesting.
+const MAX_STACK_DEPTH: usize = 10_000_000;
+
+/// Error if a list would exceed `MAX_LIST_LEN` elements.
+fn check_list_len(len: usize) -> Result<(), String> {
+    if len > MAX_LIST_LEN {
+        Err(format!(
+            "स्मृति सीमा पार: सूची की लम्बाई {} से अधिक नहीं हो सकती",
+            MAX_LIST_LEN
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 // ── Call frame ────────────────────────────────────────────────────────────────
 
 struct Frame {
@@ -90,6 +111,12 @@ impl LVM {
         vm.native_fns.insert("गिनती_कोश".into(), builtin_counter);
         vm.native_fns.insert("कार्तीय".into(), builtin_product);
         vm.native_fns.insert("सर्व_संयोजन".into(), builtin_combinations);
+        // Queue/Deque helpers (Phase 17) — copy-on-write, return NEW lists
+        vm.native_fns.insert("अग्र_जोड़ो".into(), builtin_agra_jodo);
+        vm.native_fns.insert("अग्र".into(), builtin_agra);
+        vm.native_fns.insert("पश्च".into(), builtin_pashcha);
+        vm.native_fns.insert("अग्र_हटाओ".into(), builtin_agra_hatao);
+        vm.native_fns.insert("पश्च_हटाओ".into(), builtin_pashcha_hatao);
         vm.native_fns.insert("निर्गम".into(), builtin_nirgam);
         // Math
         vm.native_fns.insert("निरपेक्ष".into(), builtin_nirapeksh);
@@ -297,6 +324,14 @@ impl LVM {
     // step dominated the interpreter loop before Phase 17 perf work.
     #[allow(clippy::too_many_lines)]
     fn exec_op(&mut self, op: &Opcode, ip: &mut usize, instructions: &[Opcode]) -> Result<bool, String> {
+        // Operand-stack guard (Phase 17C): each opcode grows the stack by a
+        // bounded amount, so checking once per instruction catches runaway
+        // growth before it OOMs. Returned as a catchable error.
+        if self.stack.len() > MAX_STACK_DEPTH {
+            return Err(format!(
+                "स्मृति सीमा पार: ढेर की गहराई {} से अधिक हो गई", MAX_STACK_DEPTH
+            ));
+        }
         match op {
                 // ── Stack ──────────────────────────────────────────────────
                 Opcode::Push(v) => {
@@ -859,6 +894,7 @@ impl LVM {
                         (Value::List(mut v), "जोड़ो") => {
                             let val = args.into_iter().next()
                                 .ok_or_else(|| "जोड़ो(): एक तर्क आवश्यक".to_string())?;
+                            check_list_len(v.len() + 1)?;
                             v.push(val);
                             Value::List(v)
                         }
@@ -909,6 +945,7 @@ impl LVM {
                 // ── Phase 5: सूची + कोश ────────────────────────────────────
 
                 Opcode::MakeList(n) => {
+                    check_list_len(*n)?;
                     let mut elems: Vec<Value> = (0..*n).map(|_| pop(&mut self.stack)).collect::<Result<_,_>>()?;
                     elems.reverse();
                     self.stack.push(Value::List(elems));
@@ -983,6 +1020,31 @@ impl LVM {
                 Opcode::GetAttr(field) => {
                     match pop(&mut self.stack)? {
                         Value::Instance { class, fields } => {
+                            // Property getter dispatch (Phase 17): if the class (or a
+                            // parent) defines `__पाओ_<field>__`, call it and use its
+                            // return value instead of reading the raw field. The
+                            // getter reads a DIFFERENT backing field (convention:
+                            // `__पाओ_मान__` reads `यह._मान`); the backing field has
+                            // no `__पाओ__मान__` method, so it reads normally — no loop.
+                            let getter = format!("__पाओ_{}__", field);
+                            if let Some(func) = self.lookup_method(&class, &getter) {
+                                let class_name = class.clone();
+                                let mut locals = HashMap::new();
+                                let inst = Value::Instance { class, fields };
+                                if let Some(p) = func.params.first() {
+                                    locals.insert(p.clone(), inst);
+                                }
+                                fill_defaults(&mut locals, &func, 1);
+                                self.push_frame(Frame {
+                                    return_addr: *ip,
+                                    locals,
+                                    global_names: std::collections::HashSet::new(),
+                                    base_stack_depth: self.stack.len(),
+                                    func_name: format!("{}.{}", class_name, getter),
+                                })?;
+                                *ip = func.start_ip;
+                                return Ok(false);
+                            }
                             let val = fields.get(field).cloned()
                                 .ok_or_else(|| format!("'{}' का क्षेत्र '{}' परिभाषित नहीं", class, field))?;
                             self.stack.push(val);
@@ -1020,6 +1082,32 @@ impl LVM {
                     let val = pop(&mut self.stack)?;
                     match pop(&mut self.stack)? {
                         Value::Instance { class, mut fields } => {
+                            // Property setter dispatch (Phase 17): if the class (or a
+                            // parent) defines `__सेट_<field>__(यह, मान)`, call it
+                            // instead of writing the raw field. The setter is expected
+                            // to store into a backing field and `फल यह` so the mutated
+                            // instance flows back to the StoreVar that follows SetAttr.
+                            // The backing field (`_मान`) has no `__सेट__मान__` method,
+                            // so writing it takes the raw path — no recursion.
+                            let setter = format!("__सेट_{}__", field);
+                            if let Some(func) = self.lookup_method(&class, &setter) {
+                                let class_name = class.clone();
+                                let mut locals = HashMap::new();
+                                let inst = Value::Instance { class, fields };
+                                for (param, v) in func.params.iter().zip([inst, val]) {
+                                    locals.insert(param.clone(), v);
+                                }
+                                fill_defaults(&mut locals, &func, func.params.len().min(2));
+                                self.push_frame(Frame {
+                                    return_addr: *ip,
+                                    locals,
+                                    global_names: std::collections::HashSet::new(),
+                                    base_stack_depth: self.stack.len(),
+                                    func_name: format!("{}.{}", class_name, setter),
+                                })?;
+                                *ip = func.start_ip;
+                                return Ok(false);
+                            }
                             fields.insert(field.clone(), val);
                             self.stack.push(Value::Instance { class, fields });
                         }
@@ -1245,6 +1333,7 @@ impl LVM {
                         } else {
                             out.push(v);
                         }
+                        check_list_len(out.len())?;
                     }
                     self.stack.push(Value::List(out));
                 }
@@ -1757,6 +1846,71 @@ fn builtin_chain(args: Vec<Value>) -> Result<Value, String> {
         }
     }
     Ok(Value::List(out))
+}
+
+// ── Queue/Deque helpers (Phase 17) ──────────────────────────────────────────────
+// LIPI lists are copy-on-write, so these return NEW lists (and the popped
+// element where relevant). Errors are catchable Hindi strings.
+
+/// अग्र_जोड़ो(सूची, मान) — new list with मान prepended (push to front).
+fn builtin_agra_jodo(args: Vec<Value>) -> Result<Value, String> {
+    let mut it = args.into_iter();
+    let list = it.next().ok_or_else(|| "अग्र_जोड़ो(): दो तर्क आवश्यक (सूची, मान)".to_string())?;
+    let val = it.next().ok_or_else(|| "अग्र_जोड़ो(): दो तर्क आवश्यक (सूची, मान)".to_string())?;
+    match list {
+        Value::List(mut v) => {
+            check_list_len(v.len() + 1)?;
+            v.insert(0, val);
+            Ok(Value::List(v))
+        }
+        other => Err(format!("अग्र_जोड़ो(): सूची अपेक्षित, मिला: {}", other)),
+    }
+}
+
+/// अग्र(सूची) — first element (error on empty).
+fn builtin_agra(args: Vec<Value>) -> Result<Value, String> {
+    match args.into_iter().next() {
+        Some(Value::List(v)) => v.into_iter().next()
+            .ok_or_else(|| "अग्र(): सूची खाली है".to_string()),
+        Some(other) => Err(format!("अग्र(): सूची अपेक्षित, मिला: {}", other)),
+        None => Err("अग्र(): एक तर्क आवश्यक".to_string()),
+    }
+}
+
+/// पश्च(सूची) — last element (error on empty).
+fn builtin_pashcha(args: Vec<Value>) -> Result<Value, String> {
+    match args.into_iter().next() {
+        Some(Value::List(v)) => v.into_iter().next_back()
+            .ok_or_else(|| "पश्च(): सूची खाली है".to_string()),
+        Some(other) => Err(format!("पश्च(): सूची अपेक्षित, मिला: {}", other)),
+        None => Err("पश्च(): एक तर्क आवश्यक".to_string()),
+    }
+}
+
+/// अग्र_हटाओ(सूची) — new list without the first element (pop from front).
+fn builtin_agra_hatao(args: Vec<Value>) -> Result<Value, String> {
+    match args.into_iter().next() {
+        Some(Value::List(mut v)) => {
+            if v.is_empty() { return Err("अग्र_हटाओ(): सूची खाली है".to_string()); }
+            v.remove(0);
+            Ok(Value::List(v))
+        }
+        Some(other) => Err(format!("अग्र_हटाओ(): सूची अपेक्षित, मिला: {}", other)),
+        None => Err("अग्र_हटाओ(): एक तर्क आवश्यक".to_string()),
+    }
+}
+
+/// पश्च_हटाओ(सूची) — new list without the last element (pop from back).
+fn builtin_pashcha_hatao(args: Vec<Value>) -> Result<Value, String> {
+    match args.into_iter().next() {
+        Some(Value::List(mut v)) => {
+            if v.is_empty() { return Err("पश्च_हटाओ(): सूची खाली है".to_string()); }
+            v.pop();
+            Ok(Value::List(v))
+        }
+        Some(other) => Err(format!("पश्च_हटाओ(): सूची अपेक्षित, मिला: {}", other)),
+        None => Err("पश्च_हटाओ(): एक तर्क आवश्यक".to_string()),
+    }
 }
 
 /// गिनती_कोश(सूची) — Counter: dict mapping each element (as string) to its
