@@ -23,25 +23,24 @@
 - [x] P1 M  **Keyword arguments** — `func(नाम=मान)` at call site · done 2026-06-12 — new CallKw opcode (0x41), works for functions/constructors/lambdas/closures; built-ins & method calls excluded
 - [x] P1 M  **Tuple unpacking** — `अ, ब है 1, 2` · done 2026-06-12 — pairwise (swap-safe) + list-unpack form via UnpackList opcode (0x43)
 - [x] P1 M  **Slice notation** — `सूची[1:5]`, `सूची[::2]`, `सूची[::-1]` · done 2026-06-12 — List + Str, full Python semantics, opcode Slice (0x44), shared engine in interpreter.rs; slice assignment not supported
-- [ ] P1 L  **List/dict comprehensions** — `[x*2 x के लिए सूची में]` · parser + compiler
+- [x] P1 L  **List comprehensions** — `[x*2 के लिए x सूची में यदि cond]` · done 2026-06-29 — multi-clause nesting, over List/Str/range/Dict-keys, optional यदि filter; desugars to KeeLiye loop machinery (no new opcodes); also fixed structural list/dict/instance/enum equality in vals_eq; test `examples/phase17_comprehension_test.swami`
 - [ ] P1 L  **Generators / yield** — `उत्पन्न करो` keyword · new opcode + lvm
-- [ ] P1 L  **Context managers** — `साथ ... करो:` (with statement) · parser + compiler + lvm
+- [x] P1 L  **Context managers** — `साथ expr के_रूप_में नाम:` · done 2026-06-29 — calls `__प्रवेश__()`→binds नाम, runs body, always `__निकास__()` (try/finally via TryStart/TryEnd/Throw; error path re-raises); test `examples/phase17_batch6_test.swami`
 - [x] P1 M  **Chained comparisons** — `0 < x < 10` · done 2026-06-12 — parser desugar to और-chain; also fixed old (a<b)<c mis-parse
 - [x] P1 S  **Integer division operator** — `//` floor divide · done 2026-06-12 — Python floor semantics, opcode FloorDiv (0x42)
 - [x] P1 M  **Spread operator** — `[*सूची1, *सूची2]` · done 2026-06-12 — opcode MakeListSp (0x46), both runtimes, non-list spread = catchable error
 - [x] P1 M  **`में_है` / `नहीं_है` operators** — `x में_है सूची` · done 2026-06-12 — List/Str/Dict, opcode Contains (0x45), shared engine in interpreter.rs
 - [x] P1 M  **Typed exceptions** — done 2026-06-12 — `फेंको`, `वर्ग X(त्रुटि)`, multi-clause typed `पकड़ो X ई:` with subclass matching + rethrow; opcodes Throw (0x47) / MatchErrClass (0x48); full back-compat with bare पकड़ो त्रुटि:
-- [ ] P1 M  **Operator overloading** — `__जोड़ो__`, `__गुणा__` etc. on classes · lvm
+- [x] P1 M  **Operator overloading** — `__जोड़ो__`(+) `__घटाओ__`(-) `__गुणा__`(*) `__भाग__`(/) `__शेष__`(%) on classes · done 2026-06-29 — VM dispatches arithmetic opcodes to the dunder method via try_instance_binop (frame reuse, walks inheritance); comparison/eq overloading not included; test `examples/phase17_batch3_test.swami`
 - [x] P1 M  **Decorators** — `@लॉग_करो` before function/class · DONE 2026-06-13 — bare `@नाम` + factory `@नाम(आर्ग)`, stacking, top-level/nested functions (not class methods); compiles to existing opcodes via hidden `__deco_X__` registration; test `examples/phase17_decorator_test.swami`
 - [ ] P1 L  **Properties** — getter/setter syntax on class fields · parser + compiler + lvm
-- [ ] P1 M  **Static / class methods** — `@वर्ग_विधि`, `@स्थिर_विधि` · parser + lvm
-- [ ] P1 M  **Abstract classes / interfaces** — duck-type contracts · parser + lvm
-- [ ] P1 M  **Multiple assignment targets** — `a = b = 0` · parser + compiler
-- [ ] P1 M  **Walrus / inline assignment** — assign + test in one expression · parser
-- [ ] P2 M  **Pattern match guards** — `लाल यदि밝기 > 50:` in मिलाओ · parser + compiler
-- [ ] P2 M  **Multiline collections** — list/dict across lines without `\` · lexer INDENT handling
-- [ ] P2 M  **Named tuples** — lightweight immutable structs · stdlib + lvm
-- [ ] P2 M  **Dataclasses** — auto-generate बनाओ/repr/eq · parser modifier
+- [x] P1 M  **Static / class methods** — `साझा विधि` · done 2026-06-29 — no implicit यह, called `ClassName.method(args)` (compile-time dispatch to Class::method, no Value::Class needed); test `examples/phase17_batch5_test.swami`
+- [x] P1 M  **Abstract classes** — `सार वर्ग` · done 2026-06-29 — constructor call raises a catchable error; concrete subclasses instantiate + inherit normally; test `examples/phase17_batch5_test.swami`
+- [x] P1 M  **Multiple assignment targets** — `अ है ब है 0` · done 2026-06-29 — chained assignment, value evaluated once and stored into every target; new Stmt::ChainAssign (Dup+StoreVar chain); test `examples/phase17_batch1_test.swami`
+- [x] P1 M  **Walrus / inline assignment** — `(न := expr)` · done 2026-06-29 — `:=` token, Expr::Walrus (Dup+StoreVar leaves value on stack); usable in conditions; test `examples/phase17_batch4_test.swami`
+- [x] P2 M  **Pattern match guards** — `वृत्त(r) यदि r से अधिक 10:` in मिलाओ · done 2026-06-29 — optional यदि guard per arm; subject value kept on stack so a failed guard retries the next arm (pending_next jump list); test `examples/phase17_batch1_test.swami`
+- [x] P2 M  **Multiline collections** — list/dict/call across lines · done 2026-06-29 — lexer tracks bracket depth across lines, suppresses INDENT/DEDENT/Newline inside open ( [ { ; test `examples/phase17_batch1_test.swami`
+- [x] P2 M  **Named tuples / Dataclasses** — `अभिलेख बिंदु(x, y)` · done 2026-06-29 — parser desugars to a class with auto-generated बनाओ storing each field; repr (`<बिंदु {x: 3, y: 4}>`) and structural eq come free from the instance machinery; test `examples/phase17_batch7_test.swami`
 
 ### 17B — Standard Library (Critical Gaps)
 
@@ -56,11 +55,11 @@
 - [x] P1 M  **Hash / crypto** — `आयात भारत.कूट` · done 2026-06-12 — sha256/md5 hex digests + base64_कूट/base64_खोलो, pure-Rust reference impls verified against published vectors
 - [ ] P1 M  **ZIP / compression** — read/write zip files · Rust miniz_oxide
 - [ ] P2 M  **SQL / SQLite** — query local db · rusqlite bindings
-- [ ] P2 M  **Statistics module** — mean, median, std-dev, variance, distributions
-- [ ] P2 M  **Collections** — Queue, Deque, OrderedDict, Counter · stdlib
-- [ ] P2 M  **Itertools** — `zip`, `enumerate`, `chain`, `product`, `combinations` · stdlib HOFs
+- [x] P2 M  **Statistics module** — `आयात भारत.सांख्यिकी` · done 2026-06-29 — माध्य/माध्यिका/बहुलक/प्रसरण/मानक_विचलन/योग/न्यूनतम/अधिकतम/परिसर over a List of numbers; empty/non-number = catchable error; test `examples/phase17_batch2_test.swami`
+- [~] P2 M  **Collections** — `गिनती_कोश`(Counter) done 2026-06-29 (builtin → Dict of counts); Queue, Deque, OrderedDict remain
+- [x] P2 M  **Itertools** — `युग्म`(zip), `गणना`(enumerate), `श्रृंखला`(chain), `कार्तीय`(product), `सर्व_संयोजन`(combinations) · done 2026-06-29 — pre-registered builtins
 - [ ] P2 M  **Functools** — memoize, partial application, compose · stdlib
-- [ ] P2 S  **UUID generation** · Rust uuid crate or simple random
+- [x] P2 S  **UUID generation** — `यूआईडी()` · done 2026-06-29 — UUID v4 from the VM PRNG, pre-registered builtin; test `examples/phase17_batch2_test.swami`
 
 ### 17C — Runtime / VM Fixes (Critical)
 
@@ -214,6 +213,9 @@
 | 2026-06-12 | Typed errors travel via a `thrown: Option<Value>` side-channel, not a new Err type | exec_op's Err(String) plumbing is everywhere; the channel lets the existing unwinder deliver the Instance while uncaught errors still print a plain message. String errors and typed errors share one catch path |
 | 2026-06-12 | `पकड़ो X:` single-ident = typed iff X is a known class | Resolved at compile time via known_classes pre-pass — keeps bare पकड़ो त्रुटि:/पकड़ो गलती: (pre-17A) working unchanged |
 | 2026-06-12 | HTTP client is http:// only | Pure-Rust-only constraint rules out rustls/native-tls; std has no TLS. Fine for localhost/LAN APIs and teaching; https errors clearly |
+| 2026-06-29 | Operator overloading is arithmetic-only (+ - * / %) | Dunder dispatch reuses the frame-call mechanism so the method's Return supplies the operator result; comparison/== would need to post-process the return into a Bool, which the frame model can't do inline. Deferred |
+| 2026-06-29 | Multiline collections via lexer bracket-depth, not parser | The lexer is line-based (emits Newline + INDENT/DEDENT per line); tracking ( [ { depth across lines and suppressing those tokens inside open brackets is a localized change that needs no parser rework |
+| 2026-06-29 | Match guards keep the subject on the stack across arms | A failed guard must be able to retry later arms, so the subject value can't be consumed until an arm fully matches (pattern + guard). Switched the मिलाओ compiler from a single last_jf to a pending_next jump list |
 
 ---
 

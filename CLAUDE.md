@@ -465,6 +465,13 @@ Key design points:
 | `फाइल_कॉपी(src, dst)` | copy file → Bool (Phase 17) |
 | `पर्यावरण(name)` | env var → Str or Nil (Phase 17) |
 | `वर्तमान_फोल्डर()` | current working dir → Str (Phase 17) |
+| `यूआईडी()` | random UUID v4 string (Phase 17) |
+| `युग्म(सूची1, सूची2, …)` | zip lists pairwise → List of Lists, truncates to shortest (Phase 17) |
+| `गणना(सूची [, शुरू])` | enumerate → List of [index, item] pairs (Phase 17) |
+| `श्रृंखला(सूची1, सूची2, …)` | chain → concatenate lists into one (Phase 17) |
+| `गिनती_कोश(सूची)` | Counter → Dict of element→count (Phase 17) |
+| `कार्तीय(सूची1, सूची2, …)` | Cartesian product → list of lists (Phase 17) |
+| `सर्व_संयोजन(सूची, r)` | all r-length combinations → list of lists (Phase 17) |
 
 **List methods (`MethodCall` in lvm.rs):**
 
@@ -524,6 +531,7 @@ Four registries, each returns `Vec<(&'static str, NativeFn)>`:
 | `भारत.csv` | `csv_registry()` | `csv_पढ़ो` (→List of List of Str, RFC 4180), `csv_शीर्षक_पढ़ो` (header row → List of Dict), `csv_लिखो` (List of Lists → text, auto-quoting) — Phase 17 |
 | `भारत.कूट` | `koot_registry()` | `sha256`, `md5` (hex digests of UTF-8 bytes), `base64_कूट`, `base64_खोलो` — pure-Rust reference implementations, Phase 17 |
 | `भारत.http` | `http_registry()` | `http_पाओ(url[, headers])` GET, `http_भेजो(url, body[, headers])` POST — returns Dict {स्थिति, शीर्षक (lowercased keys), सामग्री}; HTTP/1.1 over std::net, chunked decoding, 10s timeouts; **http:// only, no TLS**; WASM = catchable error — Phase 17 |
+| `भारत.सांख्यिकी` | `sankhyiki_registry()` | Statistics (Phase 17): `माध्य` (mean), `माध्यिका` (median), `बहुलक` (mode, ties→smallest), `प्रसरण` (population variance), `मानक_विचलन` (std-dev), `योग` (sum), `न्यूनतम` (min), `अधिकतम` (max), `परिसर` (range) — all take one List of numbers; empty/non-number = catchable error |
 | `भारत.प्रतिमान` | `regex_engine::pratimaan_registry()` | Regex (Phase 17, `src/regex_engine.rs`): `ढूंढो(p,t)` first match or शून्य, `ढूंढो_स्थान` char-index or -1, `ढूंढो_सब` → List, `मेल_है` full-match Bool, `समूह` → [पूर्ण, समूह1…] or [], `बदलो_सब(p,बदल,t)` with `$0`–`$9`/`$$`, `विभाजित_सब` — backtracking VM, pure Rust, WASM-safe; supports `. ^ $ \| () (?:) [] [^] \d\D\w\W\s\S * + ? {n,m}` + lazy variants; `\w` includes the full Devanagari block (matras/halant); 2M-step budget → catchable "बहुत जटिल" error; invalid pattern = catchable error |
 
 Key implementations:
@@ -1400,6 +1408,67 @@ Test file: `examples/phase16_test.swami` — all assertions pass.
   - Spec must start with digit/`.`/`%`/`,`/`₹` — JSON text and times like `"10:30"`
     stay literal; positional `{:spec}` for स्वरूप() unchanged
   - Test: `examples/phase17_namedspec_test.swami`
+
+- **List comprehensions** — `[x*x के लिए x सूची में यदि cond]` (2026-06-29)
+  - `Expr::Comprehension { expr, clauses, cond }`; multi-clause nesting (leftmost
+    outermost), optional यदि filter (innermost); iterates List/Str/range/Dict-keys
+  - Compiles to KeeLiye loop machinery with the accumulator list on the VM stack —
+    each element is `MethodCall("जोड़ो")` on the stack top, no new opcodes
+  - Also FIXED `vals_eq` (lvm.rs) to do **structural equality** for List/Dict/
+    Instance/Enum (was scalar-only — `[1,2] बराबर [1,2]` returned false)
+  - Test: `examples/phase17_comprehension_test.swami`
+
+- **Chained assignment** — `अ है ब है 0` (2026-06-29)
+  - `Stmt::ChainAssign { names, value }`; RHS evaluated once, stored into every
+    target (Dup+StoreVar chain). Parser uses `Ident है` lookahead in the है branch
+  - Test: `examples/phase17_batch1_test.swami`
+
+- **Pattern match guards** — `वृत्त(r) यदि r से अधिक 10:` in मिलाओ (2026-06-29)
+  - `MilaoArm.guard: Option<Expr>`; the subject value stays on the stack across all
+    arms, so a failed guard (or variant mismatch) retries the next arm. Compiler
+    switched to a `pending_next: Vec<usize>` jump list (was a single `last_jf`)
+  - Test: `examples/phase17_batch1_test.swami`
+
+- **Multiline collections** — list/dict/call spanning lines (2026-06-29)
+  - Lexer tracks ( [ { depth across lines; while depth > 0 it suppresses
+    INDENT/DEDENT and the trailing Newline (`bracket_delta` helper in lexer.rs).
+    Brackets inside string literals don't count (already folded into Str tokens)
+  - Test: `examples/phase17_batch1_test.swami`
+
+- **Operator overloading** — `__जोड़ो__`/`__घटाओ__`/`__गुणा__`/`__भाग__`/`__शेष__` (2026-06-29)
+  - VM's Add/Sub/Mul/Div/Mod opcodes: if the left operand is an Instance whose
+    class (walking the parent chain) defines the dunder, `try_instance_binop` sets
+    up a `method(यह, अन्य)` frame and the method's Return supplies the operator
+    result. Arithmetic only — comparison/`बराबर` overloading not included
+  - Test: `examples/phase17_batch3_test.swami`
+
+- **Statistics + UUID + zip/enumerate** (2026-06-29)
+  - `आयात भारत.सांख्यिकी` → माध्य/माध्यिका/बहुलक/प्रसरण/मानक_विचलन/योग/न्यूनतम/अधिकतम/परिसर
+    (`sankhyiki_registry` in bharat_stdlib.rs); `यूआईडी()` (UUID v4), `युग्म()` (zip),
+    `गणना()` (enumerate), `श्रृंखला()` (chain), `गिनती_कोश()` (Counter) pre-registered
+    builtins in LVM::new()
+  - Tests: `examples/phase17_batch2_test.swami`
+
+- **Walrus / static methods / abstract classes / context managers** (2026-06-29)
+  - **Walrus** `(न := expr)` — `:=` token (lexer), `Expr::Walrus` compiles to
+    `Dup + StoreVar` (value stays on stack); use in conditions. `examples/phase17_batch4_test.swami`
+  - **Static methods** `साझा विधि m(...)` in a class — registered as `Class::m`
+    WITHOUT यह; `ClassName.m(args)` compiles to a direct `Call("Class::m")` when the
+    object identifier is a known class (no Value::Class needed). `phase17_batch5_test`
+  - **Abstract classes** `सार वर्ग C:` — `is_abstract` in Stmt::Varg; constructor
+    calls (Call/CallKw) on an abstract class emit `Push(msg)+Throw` (catchable);
+    concrete subclasses instantiate + inherit normally. `phase17_batch5_test`
+  - **Context managers** `साथ expr के_रूप_में नाम:` — `Stmt::Saath`; compiles to
+    try/finally: `expr.__प्रवेश__()`→binds नाम, body, then `__निकास__()` on the
+    normal path AND the error path (which rethrows). `phase17_batch6_test`
+  - **itertools** `कार्तीय`(product), `सर्व_संयोजन`(combinations) builtins. `phase17_batch4_test`
+  - New keywords: `साझा` `सार` `साथ` `के_रूप_में` (साझा/सार are keywords only
+    before विधि/वर्ग; otherwise plain identifiers)
+
+- **Records / dataclasses** — `अभिलेख बिंदु(x, y)` (2026-06-29)
+  - Parser-only sugar (`अभिलेख` keyword) → a class with an auto-generated बनाओ
+    that stores each field; repr (`<बिंदु {x: 3, y: 4}>`) and structural equality
+    come free from the instance machinery. `examples/phase17_batch7_test.swami`
 
 ## Phase 17 — NEXT: possible directions
 

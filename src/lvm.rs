@@ -83,6 +83,13 @@ impl LVM {
         vm.native_fns.insert("__padho__".into(), builtin_padho);
         vm.native_fns.insert("वाक्य".into(), builtin_vakya);
         vm.native_fns.insert("यादृच्छिक".into(), builtin_yadrchik);
+        vm.native_fns.insert("यूआईडी".into(), builtin_uuid);
+        vm.native_fns.insert("युग्म".into(), builtin_zip);
+        vm.native_fns.insert("गणना".into(), builtin_ganana);
+        vm.native_fns.insert("श्रृंखला".into(), builtin_chain);
+        vm.native_fns.insert("गिनती_कोश".into(), builtin_counter);
+        vm.native_fns.insert("कार्तीय".into(), builtin_product);
+        vm.native_fns.insert("सर्व_संयोजन".into(), builtin_combinations);
         vm.native_fns.insert("निर्गम".into(), builtin_nirgam);
         // Math
         vm.native_fns.insert("निरपेक्ष".into(), builtin_nirapeksh);
@@ -157,6 +164,45 @@ impl LVM {
         }
         self.call_frames.push(frame);
         Ok(())
+    }
+
+    /// Find a method `Class::method`, walking the inheritance chain (Phase 17).
+    fn lookup_method(&self, class: &str, method: &str) -> Option<crate::opcode::FuncDef> {
+        let mut search = Some(class.to_string());
+        while let Some(cls) = search {
+            let key = format!("{}::{}", cls, method);
+            if let Some(f) = self.functions.get(&key) { return Some(f.clone()); }
+            search = self.class_parents.get(&cls).cloned();
+        }
+        None
+    }
+
+    /// Operator overloading (Phase 17): if `a` is an Instance whose class
+    /// defines the dunder `method` (e.g. `__जोड़ो__` for +), set up a call
+    /// frame `method(यह=a, अन्य=b)` and return Ok(true) — the method's Return
+    /// pushes the result where the operator's result would go. Returns Ok(false)
+    /// if `a` is not an instance or has no such method (caller falls back).
+    fn try_instance_binop(&mut self, a: Value, b: Value, method: &str, ip: &mut usize) -> Result<bool, String> {
+        if let Value::Instance { ref class, .. } = a {
+            if let Some(func) = self.lookup_method(class, method) {
+                let class_name = class.clone();
+                let mut locals = HashMap::new();
+                for (param, val) in func.params.iter().zip([a.clone(), b]) {
+                    locals.insert(param.clone(), val);
+                }
+                fill_defaults(&mut locals, &func, func.params.len().min(2));
+                self.push_frame(Frame {
+                    return_addr: *ip,
+                    locals,
+                    global_names: std::collections::HashSet::new(),
+                    base_stack_depth: self.stack.len(),
+                    func_name: format!("{}.{}", class_name, method),
+                })?;
+                *ip = func.start_ip;
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Look up a variable by reference — frame locals first, then globals.
@@ -330,21 +376,37 @@ impl LVM {
                 Opcode::Add => {
                     let b = pop(&mut self.stack)?;
                     let a = pop(&mut self.stack)?;
+                    if matches!(a, Value::Instance { .. })
+                        && self.try_instance_binop(a.clone(), b.clone(), "__जोड़ो__", ip)? {
+                        return Ok(false);
+                    }
                     self.stack.push(vm_add(a, b)?);
                 }
                 Opcode::Sub => {
                     let b = pop(&mut self.stack)?;
                     let a = pop(&mut self.stack)?;
+                    if matches!(a, Value::Instance { .. })
+                        && self.try_instance_binop(a.clone(), b.clone(), "__घटाओ__", ip)? {
+                        return Ok(false);
+                    }
                     self.stack.push(vm_num2(a, b, |x, y| x - y, "-")?);
                 }
                 Opcode::Mul => {
                     let b = pop(&mut self.stack)?;
                     let a = pop(&mut self.stack)?;
+                    if matches!(a, Value::Instance { .. })
+                        && self.try_instance_binop(a.clone(), b.clone(), "__गुणा__", ip)? {
+                        return Ok(false);
+                    }
                     self.stack.push(vm_num2(a, b, |x, y| x * y, "*")?);
                 }
                 Opcode::Div => {
                     let b = pop(&mut self.stack)?;
                     let a = pop(&mut self.stack)?;
+                    if matches!(a, Value::Instance { .. })
+                        && self.try_instance_binop(a.clone(), b.clone(), "__भाग__", ip)? {
+                        return Ok(false);
+                    }
                     if let Value::Number(dv) = &b {
                         if *dv == 0.0 { return Err("शून्य से भाग नहीं होता".into()); }
                     }
@@ -361,6 +423,10 @@ impl LVM {
                 Opcode::Mod => {
                     let b = pop(&mut self.stack)?;
                     let a = pop(&mut self.stack)?;
+                    if matches!(a, Value::Instance { .. })
+                        && self.try_instance_binop(a.clone(), b.clone(), "__शेष__", ip)? {
+                        return Ok(false);
+                    }
                     self.stack.push(vm_num2(a, b, |x, y| x % y, "%")?);
                 }
 
@@ -681,6 +747,7 @@ impl LVM {
                         "भारत.कूट"        => crate::bharat_stdlib::koot_registry(),
                         "भारत.http"       => crate::bharat_stdlib::http_registry(),
                         "भारत.प्रतिमान"   => crate::regex_engine::pratimaan_registry(),
+                        "भारत.सांख्यिकी"  => crate::bharat_stdlib::sankhyiki_registry(),
                         other => return Err(format!("अज्ञात मॉड्यूल: {}", other)),
                     };
                     for (fname, func) in registry {
@@ -1551,6 +1618,19 @@ fn vals_eq(a: &Value, b: &Value) -> bool {
         (Value::Str(x), Value::Str(y))       => x == y,
         (Value::Bool(x), Value::Bool(y))     => x == y,
         (Value::Nil, Value::Nil)             => true,
+        (Value::List(x), Value::List(y)) =>
+            x.len() == y.len() && x.iter().zip(y).all(|(a, b)| vals_eq(a, b)),
+        (Value::Dict(x), Value::Dict(y)) =>
+            x.len() == y.len()
+                && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| vals_eq(v, w))),
+        (Value::Instance { class: c1, fields: f1 },
+         Value::Instance { class: c2, fields: f2 }) =>
+            c1 == c2 && f1.len() == f2.len()
+                && f1.iter().all(|(k, v)| f2.get(k).is_some_and(|w| vals_eq(v, w))),
+        (Value::Enum { enum_name: e1, variant: v1, values: a1 },
+         Value::Enum { enum_name: e2, variant: v2, values: a2 }) =>
+            e1 == e2 && v1 == v2 && a1.len() == a2.len()
+                && a1.iter().zip(a2).all(|(a, b)| vals_eq(a, b)),
         _ => false,
     }
 }
@@ -1630,6 +1710,145 @@ fn next_rand() -> u64 {
     let next = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     RAND_STATE.store(next, std::sync::atomic::Ordering::Relaxed);
     next
+}
+
+/// यूआईडी() — random UUID v4 string (Phase 17). Uses the same PRNG as यादृच्छिक.
+fn builtin_uuid(_args: Vec<Value>) -> Result<Value, String> {
+    let mut bytes = [0u8; 16];
+    for chunk in bytes.chunks_mut(8) {
+        let r = next_rand().to_le_bytes();
+        for (b, &rb) in chunk.iter_mut().zip(r.iter()) { *b = rb; }
+    }
+    bytes[6] = (bytes[6] & 0x0F) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3F) | 0x80; // variant 10
+    let h: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
+    Ok(Value::Str(format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8], &h[8..12], &h[12..16], &h[16..20], &h[20..32]
+    )))
+}
+
+/// युग्म(सूची1, सूची2, ...) — zip: pairwise combine lists into a list of lists,
+/// truncated to the shortest input (Phase 17).
+fn builtin_zip(args: Vec<Value>) -> Result<Value, String> {
+    let mut lists: Vec<&Vec<Value>> = Vec::new();
+    for a in &args {
+        match a {
+            Value::List(l) => lists.push(l),
+            _ => return Err("युग्म(): सभी तर्क सूची होने चाहिए".into()),
+        }
+    }
+    if lists.is_empty() { return Ok(Value::List(vec![])); }
+    let n = lists.iter().map(|l| l.len()).min().unwrap_or(0);
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        out.push(Value::List(lists.iter().map(|l| l[i].clone()).collect()));
+    }
+    Ok(Value::List(out))
+}
+
+/// श्रृंखला(सूची1, सूची2, ...) — chain: concatenate lists into one (Phase 17).
+fn builtin_chain(args: Vec<Value>) -> Result<Value, String> {
+    let mut out = Vec::new();
+    for a in args {
+        match a {
+            Value::List(l) => out.extend(l),
+            _ => return Err("श्रृंखला(): सभी तर्क सूची होने चाहिए".into()),
+        }
+    }
+    Ok(Value::List(out))
+}
+
+/// गिनती_कोश(सूची) — Counter: dict mapping each element (as string) to its
+/// occurrence count (Phase 17).
+fn builtin_counter(args: Vec<Value>) -> Result<Value, String> {
+    let items = match args.first() {
+        Some(Value::List(l)) => l.clone(),
+        Some(Value::Str(s))  => s.chars().map(|c| Value::Str(c.to_string())).collect(),
+        _ => return Err("गिनती_कोश(): सूची या वाक्य अपेक्षित".into()),
+    };
+    let mut counts: HashMap<String, Value> = HashMap::new();
+    for v in items {
+        let key = format!("{v}");
+        let n = match counts.get(&key) {
+            Some(Value::Number(c)) => *c + 1.0,
+            _ => 1.0,
+        };
+        counts.insert(key, Value::Number(n));
+    }
+    Ok(Value::Dict(counts))
+}
+
+/// कार्तीय(सूची1, सूची2, ...) — Cartesian product → list of lists (Phase 17).
+fn builtin_product(args: Vec<Value>) -> Result<Value, String> {
+    let mut lists: Vec<Vec<Value>> = Vec::new();
+    for a in args {
+        match a {
+            Value::List(l) => lists.push(l),
+            _ => return Err("कार्तीय(): सभी तर्क सूची होने चाहिए".into()),
+        }
+    }
+    let mut acc: Vec<Vec<Value>> = vec![vec![]];
+    for list in &lists {
+        let mut next = Vec::new();
+        for prefix in &acc {
+            for item in list {
+                let mut row = prefix.clone();
+                row.push(item.clone());
+                next.push(row);
+            }
+        }
+        acc = next;
+    }
+    Ok(Value::List(acc.into_iter().map(Value::List).collect()))
+}
+
+/// सर्व_संयोजन(सूची, r) — all r-length combinations → list of lists (Phase 17).
+fn builtin_combinations(args: Vec<Value>) -> Result<Value, String> {
+    let items = match args.first() {
+        Some(Value::List(l)) => l.clone(),
+        _ => return Err("सर्व_संयोजन(): पहला तर्क सूची होना चाहिए".into()),
+    };
+    let r = match args.get(1) {
+        Some(Value::Number(n)) if *n >= 0.0 => *n as usize,
+        _ => return Err("सर्व_संयोजन(): दूसरा तर्क धनात्मक संख्या होना चाहिए".into()),
+    };
+    let mut out: Vec<Value> = Vec::new();
+    if r <= items.len() {
+        let mut idx: Vec<usize> = (0..r).collect();
+        loop {
+            out.push(Value::List(idx.iter().map(|&i| items[i].clone()).collect()));
+            if r == 0 { break; }
+            // advance the combination indices
+            let mut i = r;
+            loop {
+                if i == 0 { return Ok(Value::List(out)); }
+                i -= 1;
+                if idx[i] != i + items.len() - r { break; }
+            }
+            idx[i] += 1;
+            for j in i + 1..r { idx[j] = idx[j - 1] + 1; }
+        }
+    }
+    Ok(Value::List(out))
+}
+
+/// गणना(सूची [, शुरू]) — enumerate: list of [index, item] pairs (Phase 17).
+fn builtin_ganana(args: Vec<Value>) -> Result<Value, String> {
+    let items = match args.first() {
+        Some(Value::List(l)) => l.clone(),
+        Some(Value::Str(s))  => s.chars().map(|c| Value::Str(c.to_string())).collect(),
+        _ => return Err("गणना(): सूची या वाक्य अपेक्षित".into()),
+    };
+    let start = match args.get(1) {
+        Some(Value::Number(n)) => *n as i64,
+        None => 0,
+        _ => return Err("गणना(): दूसरा तर्क संख्या होना चाहिए".into()),
+    };
+    let out = items.into_iter().enumerate()
+        .map(|(i, v)| Value::List(vec![Value::Number((start + i as i64) as f64), v]))
+        .collect();
+    Ok(Value::List(out))
 }
 
 /// यादृच्छिक(n) — random integer in 0..n-1

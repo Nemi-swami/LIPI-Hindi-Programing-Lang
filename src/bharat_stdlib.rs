@@ -402,6 +402,108 @@ pub fn need_num(args: &[Value], idx: usize, fname: &str) -> Result<f64, String> 
 }
 
 // ════════════════════════════════════════════════════════════════
+// MODULE — भारत.सांख्यिकी  (Statistics, Phase 17)
+//
+// Functions take a सूची (List) of numbers. Empty lists raise a catchable
+// error; non-number elements raise a catchable error.
+// ════════════════════════════════════════════════════════════════
+
+/// Extract a Vec<f64> from a single List argument; errors on empty / non-number.
+fn need_num_list(args: &[Value], fname: &str) -> Result<Vec<f64>, String> {
+    match args.first() {
+        Some(Value::List(items)) => {
+            if items.is_empty() {
+                return Err(format!("{}: खाली सूची पर गणना नहीं हो सकती", fname));
+            }
+            items.iter().map(|v| match v {
+                Value::Number(n) => Ok(*n),
+                other => Err(format!("{}: सूची में संख्या अपेक्षित, मिला {:?}", fname, other)),
+            }).collect()
+        }
+        Some(other) => Err(format!("{}: सूची अपेक्षित, मिला {:?}", fname, other)),
+        None => Err(format!("{}: एक सूची तर्क आवश्यक", fname)),
+    }
+}
+
+fn stat_madhya(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "माध्य")?;
+    Ok(Value::Number(v.iter().sum::<f64>() / v.len() as f64))
+}
+
+fn stat_madhyika(args: Vec<Value>) -> Result<Value, String> {
+    let mut v = need_num_list(&args, "माध्यिका")?;
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = v.len();
+    let med = if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 };
+    Ok(Value::Number(med))
+}
+
+fn stat_bahulak(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "बहुलक")?;
+    // Most frequent value; ties broken by smallest value.
+    let mut best = v[0];
+    let mut best_count = 0usize;
+    for &x in &v {
+        let c = v.iter().filter(|&&y| (y - x).abs() < f64::EPSILON).count();
+        if c > best_count || (c == best_count && x < best) {
+            best = x;
+            best_count = c;
+        }
+    }
+    Ok(Value::Number(best))
+}
+
+fn stat_prasaran(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "प्रसरण")?;
+    let mean = v.iter().sum::<f64>() / v.len() as f64;
+    let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / v.len() as f64;
+    Ok(Value::Number(var))
+}
+
+fn stat_manak_vichalan(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "मानक_विचलन")?;
+    let mean = v.iter().sum::<f64>() / v.len() as f64;
+    let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / v.len() as f64;
+    Ok(Value::Number(var.sqrt()))
+}
+
+fn stat_yog(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "योग")?;
+    Ok(Value::Number(v.iter().sum()))
+}
+
+fn stat_nyuntam(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "न्यूनतम")?;
+    Ok(Value::Number(v.iter().cloned().fold(f64::INFINITY, f64::min)))
+}
+
+fn stat_adhiktam(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "अधिकतम")?;
+    Ok(Value::Number(v.iter().cloned().fold(f64::NEG_INFINITY, f64::max)))
+}
+
+fn stat_parisar(args: Vec<Value>) -> Result<Value, String> {
+    let v = need_num_list(&args, "परिसर")?;
+    let mn = v.iter().cloned().fold(f64::INFINITY, f64::min);
+    let mx = v.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    Ok(Value::Number(mx - mn))
+}
+
+pub fn sankhyiki_registry() -> Registry {
+    vec![
+        ("माध्य", stat_madhya),
+        ("माध्यिका", stat_madhyika),
+        ("बहुलक", stat_bahulak),
+        ("प्रसरण", stat_prasaran),
+        ("मानक_विचलन", stat_manak_vichalan),
+        ("योग", stat_yog),
+        ("न्यूनतम", stat_nyuntam),
+        ("अधिकतम", stat_adhiktam),
+        ("परिसर", stat_parisar),
+    ]
+}
+
+// ════════════════════════════════════════════════════════════════
 // MODULE 5 — भारत.गणित  (Ancient Hindu Mathematics)
 //
 // Sources:

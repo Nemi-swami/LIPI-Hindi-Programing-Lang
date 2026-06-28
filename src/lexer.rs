@@ -70,6 +70,11 @@ pub enum TokenKind {
     Jancho,    // जाँचो  — assert (Nyaya Pratijna verification)
     Sthir,     // स्थिर  — immutable constant (Samkhya Purusha = unchanging)
     Shuddha,   // शुद्ध  — pure function (Gita karma yoga without side effects)
+    Sajha,     // साझा  — static (shared) class method, no यह (Phase 17)
+    Sar,       // सार   — abstract class marker, सार वर्ग (Phase 17)
+    Saath,     // साथ   — context manager (with), Phase 17
+    KeRupMein, // के_रूप_में — "as" binder in a साथ block (Phase 17)
+    Abhilekh,  // अभिलेख — record / dataclass shorthand (Phase 17)
 
     // Phase 17 — test framework
     Parikshan, // परीक्षण — test block (run via `lipi test file.swami`)
@@ -78,6 +83,7 @@ pub enum TokenKind {
     SlashSlash,  // // — floor (integer) division (Phase 17)
     EqEq, NotEq, Lt, Gt, LtEq, GtEq,
     Assign,    // = — default parameter values (Phase 17)
+    ColonEq,   // := — walrus / inline assignment (Phase 17)
     LBracket, RBracket,  // [ ]
     LBrace, RBrace,      // { }
     Colon, Dot, Comma, LParen, RParen,
@@ -154,16 +160,34 @@ pub fn tokenize(src: &str) -> Vec<Token> {
     let src = preprocessed.as_str();
     let mut out: Vec<Token> = Vec::new();
     let mut indent_stack: Vec<usize> = vec![0];
+    // Running depth of open ( [ { across lines — when > 0 we are inside a
+    // multiline collection / call, so indentation and Newline are suppressed
+    // until the brackets balance (Phase 17 multiline collections).
+    let mut bracket_depth: i32 = 0;
 
     for (line_idx, line) in src.lines().enumerate() {
         let line_num = line_idx + 1;
-        let indent = leading_indent(line);
         let content = line[leading_char_count(line)..].trim_end();
+        let trimmed = strip_comment(content).trim();
+
+        if bracket_depth > 0 {
+            // Continuation line inside open brackets — no INDENT/DEDENT, and
+            // no Newline until the brackets close.
+            if trimmed.is_empty() { continue; }
+            let line_toks = lex_line(trimmed, line_num);
+            bracket_depth += bracket_delta(&line_toks);
+            out.extend(line_toks);
+            if bracket_depth <= 0 {
+                bracket_depth = 0;
+                out.push(Token { kind: TokenKind::Newline, line: line_num });
+            }
+            continue;
+        }
 
         // Skip blank / comment-only lines
-        let trimmed = strip_comment(content).trim();
         if trimmed.is_empty() { continue; }
 
+        let indent = leading_indent(line);
         let cur = *indent_stack.last().unwrap();
         if indent > cur {
             indent_stack.push(indent);
@@ -176,8 +200,13 @@ pub fn tokenize(src: &str) -> Vec<Token> {
         }
 
         let line_toks = lex_line(trimmed, line_num);
+        bracket_depth += bracket_delta(&line_toks);
         out.extend(line_toks);
-        out.push(Token { kind: TokenKind::Newline, line: line_num });
+        if bracket_depth <= 0 {
+            bracket_depth = 0;
+            out.push(Token { kind: TokenKind::Newline, line: line_num });
+        }
+        // else: open bracket — suppress Newline, next lines are continuations
     }
 
     // Close any remaining open blocks
@@ -193,6 +222,21 @@ pub fn tokenize(src: &str) -> Vec<Token> {
 }
 
 // ===== LINE LEXER =====
+
+/// Net change in open-bracket depth contributed by a line's tokens —
+/// counts ( [ { as +1 and ) ] } as -1. Brackets inside string literals are
+/// already folded into `Str` tokens, so they don't count (Phase 17).
+fn bracket_delta(toks: &[Token]) -> i32 {
+    let mut d = 0;
+    for t in toks {
+        match t.kind {
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => d += 1,
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => d -= 1,
+            _ => {}
+        }
+    }
+    d
+}
 
 fn lex_line(src: &str, line: usize) -> Vec<Token> {
     let chars: Vec<char> = src.chars().collect();
@@ -296,7 +340,10 @@ fn lex_line(src: &str, line: usize) -> Vec<Token> {
                 else { pos += 1; TokenKind::Slash }
             }
             '%' => { pos += 1; TokenKind::Percent }
-            ':' => { pos += 1; TokenKind::Colon }
+            ':' => {
+                if pos + 1 < chars.len() && chars[pos+1] == '=' { pos += 2; TokenKind::ColonEq }
+                else { pos += 1; TokenKind::Colon }
+            }
             '.' => { pos += 1; TokenKind::Dot }
             ',' => { pos += 1; TokenKind::Comma }
             '(' => { pos += 1; TokenKind::LParen }
@@ -403,7 +450,17 @@ fn match_kw(word: &str, chars: &[char], pos: &mut usize, line: usize) -> Token {
         "जाँचो"   => TokenKind::Jancho,
         "स्थिर"   => TokenKind::Sthir,
         "शुद्ध"   => TokenKind::Shuddha,
+        // साझा/सार are keywords only before विधि/वर्ग — otherwise plain identifiers
+        "साझा"    => if peek_word(chars, *pos).as_deref() == Some("विधि") {
+            TokenKind::Sajha
+        } else { TokenKind::Ident("साझा".into()) },
+        "सार"     => if peek_word(chars, *pos).as_deref() == Some("वर्ग") {
+            TokenKind::Sar
+        } else { TokenKind::Ident("सार".into()) },
         "परीक्षण" => TokenKind::Parikshan,
+        "साथ"     => TokenKind::Saath,
+        "के_रूप_में" => TokenKind::KeRupMein,
+        "अभिलेख"  => TokenKind::Abhilekh,
         other => TokenKind::Ident(other.into()),
     };
     Token { kind, line }
