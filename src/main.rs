@@ -13,6 +13,9 @@ mod editor;
 mod tui;
 mod roman;
 mod phonetic;
+mod formatter;
+mod lint;
+mod docgen;
 
 use std::io::{self, BufRead, Write};
 
@@ -171,6 +174,48 @@ fn run_source_file(path: &str) {
     }
 }
 
+// ── Phase 17D tooling: fmt / lint / doc ────────────────────────────────────────
+
+/// `lipi fmt foo.swami`         → print formatted source to stdout
+/// `lipi fmt --write foo.swami` → reformat the file in place
+fn run_fmt(path: &str, write: bool) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let formatted = formatter::format_source(&source);
+    if write {
+        match std::fs::write(path, &formatted) {
+            Ok(()) => println!("✓ स्वरूपित: {}", path),
+            Err(e) => { eprintln!("लिख त्रुटि '{}': {e}", path); std::process::exit(2); }
+        }
+    } else {
+        print!("{}", formatted);
+    }
+}
+
+/// `lipi lint foo.swami` → report linter warnings (exit 0)
+fn run_lint(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    lint::lint_source(&source);
+}
+
+/// `lipi doc foo.swami` → emit Markdown documentation to stdout
+fn run_doc(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let title = std::path::Path::new(path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(path);
+    print!("{}", docgen::generate(&source, title));
+}
+
 // ── REPL ──────────────────────────────────────────────────────────────────────
 
 fn repl() {
@@ -222,6 +267,18 @@ fn main() {
 
         // lipi test foo.swami  → run परीक्षण blocks (Phase 17 test framework)
         [_, cmd, path] if cmd == "test" => run_tests(path),
+
+        // lipi fmt --write foo.swami → reformat the file in place
+        [_, cmd, flag, path] if cmd == "fmt" && flag == "--write" => run_fmt(path, true),
+
+        // lipi fmt foo.swami  → print formatted source to stdout
+        [_, cmd, path] if cmd == "fmt" => run_fmt(path, false),
+
+        // lipi lint foo.swami → report linter warnings (Phase 17D)
+        [_, cmd, path] if cmd == "lint" => run_lint(path),
+
+        // lipi doc foo.swami  → emit Markdown documentation (Phase 17D)
+        [_, cmd, path] if cmd == "doc" => run_doc(path),
 
         // lipi foo.libc [a b c] → execute precompiled bytecode (args → तर्क())
         [_, path, rest @ ..] if path.ends_with(".libc") => {
@@ -275,6 +332,6 @@ fn main() {
             run_source_file(path);
         }
 
-        _ => eprintln!("उपयोग: lipi [build|run|edit|roman|roman-show|phonetic|phonetic-show <फ़ाइल>] | [फ़ाइल.swami|.roman|.vani]"),
+        _ => eprintln!("उपयोग: lipi [build|run|edit|test|fmt|fmt --write|lint|doc|roman|roman-show|phonetic|phonetic-show <फ़ाइल>] | [फ़ाइल.swami|.roman|.vani]"),
     }
 }
