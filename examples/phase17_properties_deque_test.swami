@@ -1,0 +1,81 @@
+# Phase 17 — Properties (getter/setter), Queue/Deque helpers, memory limits
+
+बताओ "=== गुण (Properties) ==="
+
+वर्ग तापमान:
+    विधि बनाओ(से):
+        यह._से है से
+    । getter: तापमान.से reads backing field यह._से (no recursion) ।
+    विधि __पाओ_से__():
+        फल यह._से
+    । getter computed property: फारेनहाइट from celsius ।
+    विधि __पाओ_फा__():
+        फल यह._से * 9 / 5 + 32
+    । setter: validates then stores into backing field, returns यह ।
+    विधि __सेट_से__(मान):
+        यदि मान से कम -273:
+            फेंको "परम शून्य से नीचे असंभव"
+        यह._से है मान
+        फल यह
+
+त है तापमान(25)
+बताओ त.से               # 25  (getter reads _से)
+बताओ त.फा               # 77  (computed getter)
+
+त.से है 100             # setter runs, stores 100
+बताओ त.से               # 100
+बताओ त.फा               # 212
+
+# no-recursion proof: getter __पाओ_से__ reads यह._से which has NO getter,
+# so it does not loop. If it looped, the program would overflow above.
+बताओ "गुण ठीक — कोई अनंत पुनरावृत्ति नहीं"
+
+# setter validation (catchable)
+कोशिश:
+    त.से है -300
+पकड़ो त्रुटि:
+    बताओ "पकड़ा: " + त्रुटि
+
+# inheritance: getter/setter inherited from parent
+वर्ग सेंसर(तापमान):
+    विधि बनाओ(से, नाम):
+        यह._से है से
+        यह.नाम है नाम
+
+स है सेंसर(10, "बाहर")
+बताओ स.से               # 10  (inherited getter)
+बताओ स.फा               # 50  (inherited computed getter)
+स.से है 20              # inherited setter
+बताओ स.से               # 20
+
+बताओ ""
+बताओ "=== कतार / Deque ==="
+
+सूची है [2, 3, 4]
+सूची है अग्र_जोड़ो(सूची, 1)
+बताओ सूची              # [1, 2, 3, 4]
+बताओ अग्र(सूची)        # 1
+बताओ पश्च(सूची)        # 4
+सूची है अग्र_हटाओ(सूची)
+बताओ सूची              # [2, 3, 4]
+सूची है पश्च_हटाओ(सूची)
+बताओ सूची              # [2, 3]
+
+# errors on empty (catchable)
+खाली है []
+कोशिश:
+    बताओ अग्र(खाली)
+पकड़ो त्रुटि:
+    बताओ "खाली पकड़ा: " + त्रुटि
+
+# queue simulation
+कतार है []
+कतार है कतार.जोड़ो("क")
+कतार है कतार.जोड़ो("ख")
+पहला है अग्र(कतार)
+कतार है अग्र_हटाओ(कतार)
+बताओ "निकाला: " + पहला
+बताओ कतार              # ["ख"]
+
+बताओ ""
+बताओ "सब परीक्षण पूर्ण"
