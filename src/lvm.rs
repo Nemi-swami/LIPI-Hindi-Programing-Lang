@@ -1284,6 +1284,7 @@ impl LVM {
                         "भारत.संजाल"      => crate::net::sanjaal_registry(),
                         "भारत.संपीडन"     => crate::zip::sampidan_registry(),
                         "भारत.संग्रह"     => crate::sql::sangraha_registry(),
+                        "भारत.मात्रक"     => crate::matrak::matrak_registry(),
                         other => return Err(format!("अज्ञात मॉड्यूल: {}", other)),
                     };
                     for (fname, func) in registry {

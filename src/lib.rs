@@ -9,6 +9,7 @@ mod bignum;
 mod net;
 mod zip;
 mod sql;
+mod matrak;
 mod opcode;
 mod compiler;
 mod lvm;
