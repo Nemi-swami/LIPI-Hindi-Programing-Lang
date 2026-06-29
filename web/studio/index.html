@@ -303,8 +303,25 @@ function showPanel(p) {
   document.getElementById('problems').style.display = p === 'problems' ? 'block' : 'none';
 }
 
+function flashStatus(msg, color) {
+  const el = document.getElementById('wasm-status');
+  const prev = el.textContent, prevC = el.style.color;
+  el.textContent = msg; el.style.color = color;
+  setTimeout(() => { el.textContent = prev; el.style.color = prevC; }, 2200);
+}
 document.getElementById('run').onclick = run;
-document.getElementById('fmt').onclick = () => { if (editor) editor.getAction('editor.action.formatDocument')?.run(); };
+document.getElementById('fmt').onclick = () => {
+  if (!editor || !wasm) { flashStatus('WASM तैयार नहीं', 'var(--red)'); return; }
+  const src = editor.getValue();
+  const diags = JSON.parse(wasm.lipi_diagnostics(src));
+  if (diags.length) { flashStatus('स्वरूप विफल — पहले सिंटैक्स त्रुटि ठीक करें', 'var(--red)'); showPanel('problems'); return; }
+  const formatted = wasm.lipi_format(src);
+  if (formatted === src) { flashStatus('पहले से स्वरूपित ✓', 'var(--grn)'); return; }
+  const pos = editor.getPosition();
+  editor.executeEdits('fmt', [{ range: editor.getModel().getFullModelRange(), text: formatted }]);
+  if (pos) editor.setPosition(pos);
+  flashStatus('स्वरूपित ✓', 'var(--grn)');
+};
 document.getElementById('newf').onclick = () => {
   const name = prompt('नई फ़ाइल का नाम:', 'नया.swami'); if (!name) return;
   files[name] = ''; saveFiles(); switchFile(name);
