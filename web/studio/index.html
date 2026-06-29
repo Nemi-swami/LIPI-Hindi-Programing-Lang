@@ -72,6 +72,8 @@
     <span class="brand">◆ LIPI Studio</span>
     <button class="tb" id="run">▶ चलाओ (Ctrl+Enter)</button>
     <button class="tb ghost" id="fmt">स्वरूप</button>
+    <button class="tb ghost" id="translit" title="लाइव रोमन इनपुट: QWERTY में टाइप करें, देवनागरी पाएँ">⌨ इनपुट: देवनागरी</button>
+    <button class="tb ghost" id="convert" title="पूरी फ़ाइल को रोमन से देवनागरी में बदलें">A→अ रूपांतर</button>
     <button class="tb ghost" id="newf">+ नई फ़ाइल</button>
     <span class="sep"></span>
     <span id="wasm-status" style="color:var(--fg2);font-size:12px">WASM लोड हो रहा…</span>
@@ -196,8 +198,28 @@ require(['vs/editor/editor.main'], function () {
   });
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, run);
   window.editor = editor;
+  // Live Roman→Devanagari: when a word-boundary char is typed, transliterate the
+  // ASCII word just before it. Lets QWERTY users type Hindi as on a phone keyboard.
+  editor.onDidType((ch) => {
+    if (!translitOn || !wasm) return;
+    if (/^[A-Za-z]$/.test(ch)) return;
+    const model = editor.getModel(), pos = editor.getPosition();
+    const line = model.getLineContent(pos.lineNumber);
+    const boundaryIdx = pos.column - 2;
+    if (boundaryIdx < 0) return;
+    const before = line.substring(0, boundaryIdx);
+    const m = before.match(/([A-Za-z]+)$/);
+    if (!m) return;
+    const word = m[1];
+    const dev = wasm.lipi_phonetic(word);
+    if (!dev || dev === word) return;
+    const startCol = boundaryIdx - word.length + 1;
+    const range = new monacoRef.Range(pos.lineNumber, startCol, pos.lineNumber, boundaryIdx + 1);
+    editor.executeEdits('translit', [{ range, text: dev }]);
+  });
   renderTabs(); renderSidebar();
 });
+let translitOn = false;
 
 // ── WASM ──
 function wasmFail(msg) {
@@ -325,6 +347,22 @@ document.getElementById('fmt').onclick = () => {
 document.getElementById('newf').onclick = () => {
   const name = prompt('नई फ़ाइल का नाम:', 'नया.swami'); if (!name) return;
   files[name] = ''; saveFiles(); switchFile(name);
+};
+document.getElementById('translit').onclick = () => {
+  translitOn = !translitOn;
+  const b = document.getElementById('translit');
+  b.textContent = translitOn ? '⌨ इनपुट: रोमन ✓' : '⌨ इनपुट: देवनागरी';
+  b.style.background = translitOn ? '#0e639c' : 'transparent';
+  b.style.color = '#fff';
+  flashStatus(translitOn ? 'लाइव रोमन इनपुट चालू — QWERTY में टाइप करें' : 'देवनागरी इनपुट', 'var(--grn)');
+};
+document.getElementById('convert').onclick = () => {
+  if (!editor || !wasm) { flashStatus('WASM तैयार नहीं', 'var(--red)'); return; }
+  const src = editor.getValue();
+  const dev = wasm.lipi_phonetic(src);
+  if (dev === src) { flashStatus('कोई रोमन शब्द नहीं मिला', 'var(--fg2)'); return; }
+  editor.setValue(dev);
+  flashStatus('रूपांतरित ✓ (रोमन → देवनागरी)', 'var(--grn)');
 };
 document.querySelectorAll('#activity .ic').forEach(ic => ic.onclick = () => {
   document.querySelectorAll('#activity .ic').forEach(x => x.classList.remove('active'));

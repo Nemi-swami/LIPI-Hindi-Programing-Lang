@@ -13,6 +13,8 @@ mod opcode;
 mod compiler;
 mod lvm;
 mod formatter;
+mod roman;
+mod phonetic;
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
@@ -130,6 +132,20 @@ pub fn lipi_completions() -> String {
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub fn lipi_format(src: &str) -> String {
     formatter::format_source(src)
+}
+
+/// Phonetic transliteration (QWERTY → Devanagari): keywords + identifiers.
+/// `batao "x"\nnaam hai 5` → `बताओ "x"\nनाम है 5`. Used by LIPI Studio's live
+/// Roman-input mode and the whole-document convert button.
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_phonetic(src: &str) -> String {
+    phonetic::vani_to_devanagari(src)
+}
+
+/// Keyword-only Roman → Devanagari (identifiers/strings kept verbatim).
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_roman(src: &str) -> String {
+    roman::roman_to_devanagari(src)
 }
 
 /// Hover documentation for a word (keyword or builtin), or "" if unknown.
