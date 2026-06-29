@@ -85,9 +85,8 @@ Pure Rust core, no external crates (frontend JS assets like Monaco are allowed, 
 - [x] H1 **भारत.मात्रक (units / dimensional analysis)** — DONE 2026-06-30 — src/matrak.rs; quantities = SI
       value + 7-vector dimension exponents; मात्रा/जोड़_मात्रा/घटा/गुणा/भाग/मान_में/मात्रा_वाक्य/विमा_बराबर;
       arithmetic dimension-checked (force+length → विमा बेमेल; 500N+100lbf auto-converts). 6/6 pass.
-- [ ] H2 **भारत.रेखीय (linear algebra)** — vectors (dot/cross/norm), matrices (mul/transpose/det/inverse),
-      quaternions (mul/normalize/slerp/euler).
-- [ ] H3 **भारत.नियंत्रण (control)** — PID controller (anti-windup), Kalman filter (predict/update).
-- [ ] H4 **भारत.दिशा (navigation/geodesy)** — haversine, bearing, destination, ECEF↔lat-lon.
-- [ ] H5 **भारत.सुरक्षा (fault tolerance)** — Hamming(7,4) ECC, CRC, triple-modular-redundancy voter, watchdog.
-- [ ] H6 **भारत.अंतराल (interval arithmetic) + deterministic mode** — guaranteed bounds; reproducible runs.
+- [x] H2 **भारत.रेखीय** — DONE 2026-06-30 — vectors/matrices(det,inverse)/quaternions; 4/4 pass.
+- [x] H3 **भारत.नियंत्रण** — DONE 2026-06-30 — PID (anti-windup) + 1D Kalman; converge/smooth verified.
+- [x] H4 **भारत.दिशा** — DONE 2026-06-30 — haversine/bearing/destination/ECEF; Delhi→Mumbai=1149km.
+- [x] H5 **भारत.सुरक्षा** — DONE 2026-06-30 — Hamming(7,4) corrects bit-flips, CRC32, TMR voter, deadline.
+- [x] H6 **भारत.अंतराल** — DONE 2026-06-30 — interval arithmetic + बीज_सेट() deterministic seed.

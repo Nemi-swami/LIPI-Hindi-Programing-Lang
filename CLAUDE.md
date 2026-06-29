@@ -71,6 +71,15 @@ lipi foo.vani             # auto-detected by extension
 | `src/sql.rs` | `भारत.संग्रह` — minimal in-memory SQL engine + file persistence (Phase 17C) |
 | `src/pkg.rs` | `lipi pkg` — local package manager (lipi.toml + lipi_modules/) (Phase 17D) |
 | `src/lsp.rs` | `lipi lsp` — Language Server Protocol over stdio, self-contained JSON (Phase 17D) |
+| `src/flame.rs` | `lipi profile --flame` — SVG flame-graph generator (Phase 18 F1) |
+| `src/ide.rs` | `lipi ide` — pure-Rust static server launching LIPI Studio (Phase 18 G) |
+| `src/matrak.rs` | `भारत.मात्रक` — units / dimensional analysis (Phase 18 H1) |
+| `src/rekhiy.rs` | `भारत.रेखीय` — linear algebra: vectors/matrices/quaternions (Phase 18 H2) |
+| `src/niyantran.rs` | `भारत.नियंत्रण` — PID + Kalman control (Phase 18 H3) |
+| `src/disha.rs` | `भारत.दिशा` — navigation / geodesy (Phase 18 H4) |
+| `src/suraksha.rs` | `भारत.सुरक्षा` — Hamming ECC / CRC / TMR fault tolerance (Phase 18 H5) |
+| `src/antaral.rs` | `भारत.अंतराल` — interval arithmetic (Phase 18 H6) |
+| `web/studio/index.html` | LIPI Studio — Monaco-based browser IDE (Phase 18 G), served by `lipi ide` |
 | `src/main.rs` | Entry point — routes source through compiler → LVM |
 | `src/lib.rs` | WASM library root — exposes `run_source` via `wasm_bindgen` |
 
@@ -584,6 +593,12 @@ Four registries, each returns `Vec<(&'static str, NativeFn)>`:
 | `भारत.संजाल` | `net::sanjaal_registry()` | TCP sockets (Phase 17, `src/net.rs`): `सॉकेट_जोड़ो(host,port)` connect, `सॉकेट_सुनो` listen, `सॉकेट_स्वीकारो` accept, `सॉकेट_भेजो`/`सॉकेट_पढ़ो`/`सॉकेट_बंद`; thread-local handle registry (opaque Number ids); pure std::net; WASM = catchable error |
 | `भारत.संपीडन` | `zip::sampidan_registry()` | ZIP (Phase 17, `src/zip.rs`): `ज़िप_लिखो(path, कोश)` write (STORE), `ज़िप_पढ़ो(path)` → {name:text} (reads STORE + DEFLATE via full pure-Rust inflate), `ज़िप_सूची(path)` entry names; CRC32; verified bidirectional vs Windows |
 | `भारत.संग्रह` | `sql::sangraha_registry()` | Local SQL DB (Phase 17, `src/sql.rs`): `db_नया()` → handle, `db_चलाओ(h, sql)` (SELECT→List of Dict, else affected-count), `db_सहेजो`/`db_खोलो`/`db_बंद`; SQL subset CREATE/INSERT/SELECT(cols,WHERE AND/OR,ORDER BY,LIMIT)/UPDATE/DELETE/DROP; pure Rust, no rusqlite |
+| `भारत.मात्रक` | `matrak::matrak_registry()` | **Mission-critical** units / dimensional analysis (Phase 18, `src/matrak.rs`): `मात्रा(मान,इकाई)`, `जोड़_मात्रा`/`घटा_मात्रा`/`गुणा_मात्रा`/`भाग_मात्रा` (dimension-checked → catchable विमा बेमेल), `मान_में`, `मात्रा_वाक्य`, `विमा_बराबर`. Catches the Mars-Orbiter lbf-vs-N bug class |
+| `भारत.रेखीय` | `rekhiy::rekhiy_registry()` | Linear algebra (Phase 18, `src/rekhiy.rs`): vectors (बिंदु_गुणन/कोण_गुणन/परिमाण/सामान्य/सदिश_योग/दूरी), matrices (आव्यूह_गुणन/परिवर्त/सारणिक/प्रतिलोम/तत्समक), quaternions `[w,x,y,z]` (चतुष्क_गुणन/सामान्य/कोण_से_चतुष्क/चतुष्क_से_कोण/घुमाव/प्रक्षेप slerp) |
+| `भारत.नियंत्रण` | `niyantran::niyantran_registry()` | Control (Phase 18, `src/niyantran.rs`): पीआईडी_बनाओ/पीआईडी_चरण (PID + anti-windup), कलमैन_बनाओ/कलमैन_चरण (1-D Kalman); step fns return `[output, new_state]` |
+| `भारत.दिशा` | `disha::disha_registry()` | Navigation/geodesy (Phase 18, `src/disha.rs`): महावृत्त_दूरी (haversine km), दिशा_कोण (bearing°), गंतव्य (destination), ईसीईएफ (WGS-84 → ECEF); lat/lon in degrees |
+| `भारत.सुरक्षा` | `suraksha::suraksha_registry()` | Fault tolerance (Phase 18, `src/suraksha.rs`): हैमिंग_कूट/हैमिंग_विकोड (Hamming(7,4) corrects single bit-flips), सीआरसी32, बहुमत (TMR voter), समय_सीमा_जाँच (deadline) |
+| `भारत.अंतराल` | `antaral::antaral_registry()` | Interval arithmetic (Phase 18, `src/antaral.rs`): अंतराल/अंतराल_योग/घटा/गुणा/चौड़ाई/मध्य/में — rigorous `[lo,hi]` bounds. Pair with `बीज_सेट(n)` builtin for reproducible runs |
 
 Key implementations:
 - **Aadhaar**: full Verhoeff algorithm with `D[10][10]`, `P[8][10]`, `INV[10]` tables. First digit must not be 0 or 1 (UIDAI rule). Test valid: `"234567890124"`.
