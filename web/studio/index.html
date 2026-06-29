@@ -113,7 +113,16 @@ let view = 'files';
 function saveFiles() { localStorage.setItem('lipi_files', JSON.stringify(files)); }
 
 // ── Monaco ──
-require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+const MONACO_VS = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs';
+require.config({ paths: { vs: MONACO_VS } });
+// Cross-origin worker shim — load Monaco workers from the CDN via a proxy blob so
+// language features don't fall back to the main thread (or fail) over http.
+self.MonacoEnvironment = {
+  getWorkerUrl: function () {
+    const code = `self.MonacoEnvironment={baseUrl:'${MONACO_VS}/'};importScripts('${MONACO_VS}/base/worker/workerMain.js');`;
+    return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(code);
+  }
+};
 require(['vs/editor/editor.main'], function () {
   monacoRef = monaco;
   monaco.languages.register({ id: 'lipi' });
@@ -183,16 +192,25 @@ require(['vs/editor/editor.main'], function () {
 });
 
 // ── WASM ──
-import('../pkg/lipi.js').then(async (mod) => {
-  await mod.default();
-  wasm = mod;
-  document.getElementById('wasm-status').textContent = 'WASM तैयार ✓';
-  document.getElementById('wasm-status').style.color = 'var(--grn)';
-  lint();
-}).catch(e => {
-  document.getElementById('wasm-status').textContent = 'WASM त्रुटि — pkg/ बनाएँ';
-  document.getElementById('wasm-status').style.color = 'var(--red)';
-});
+function wasmFail(msg) {
+  const el = document.getElementById('wasm-status');
+  el.textContent = msg; el.style.color = 'var(--red)';
+  const out = document.getElementById('output');
+  if (out) { showPanel('output'); out.textContent = msg; }
+}
+if (location.protocol === 'file:') {
+  wasmFail('⚠ file:// से न खोलें — टर्मिनल में `lipi ide` चलाएँ (WASM को http:// चाहिए)।');
+} else {
+  import('../pkg/lipi.js').then(async (mod) => {
+    await mod.default();
+    wasm = mod;
+    const el = document.getElementById('wasm-status');
+    el.textContent = 'WASM तैयार ✓'; el.style.color = 'var(--grn)';
+    lint(); renderSymbols();
+  }).catch(e => {
+    wasmFail('WASM लोड विफल — `wasm-pack build --target web --out-dir web/pkg --features wasm` चलाएँ। (' + e + ')');
+  });
+}
 
 // ── Actions ──
 function run() {
