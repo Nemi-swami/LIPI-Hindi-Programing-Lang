@@ -41,3 +41,98 @@ pub fn run_source(src: &str) -> String {
         Err(e) => format!("व्याकरण त्रुटि: {e}"),
     }
 }
+
+fn json_str(s: &str) -> String {
+    let mut o = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => o.push_str("\\\""),
+            '\\' => o.push_str("\\\\"),
+            '\n' => o.push_str("\\n"),
+            '\r' => o.push_str("\\r"),
+            '\t' => o.push_str("\\t"),
+            c if (c as u32) < 0x20 => o.push_str(&format!("\\u{:04x}", c as u32)),
+            c => o.push(c),
+        }
+    }
+    o.push('"');
+    o
+}
+
+/// Parse the source and return diagnostics as JSON: [{"line":N,"message":"..."}].
+/// Empty array `[]` means no parse errors.
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_diagnostics(src: &str) -> String {
+    let tokens = lexer::tokenize(src);
+    match parser::parse(tokens) {
+        Ok(_) => "[]".to_string(),
+        Err(e) => {
+            let mut line = 1i64;
+            if let Some(p) = e.find("(line ") {
+                let rest = &e[p + 6..];
+                if let Some(end) = rest.find(')') { line = rest[..end].trim().parse().unwrap_or(1); }
+            }
+            format!("[{{\"line\":{},\"message\":{}}}]", line, json_str(&e))
+        }
+    }
+}
+
+/// Extract विधि/वर्ग definitions as JSON: [{"name":"..","kind":"function|class","line":N}].
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_symbols(src: &str) -> String {
+    let mut items = Vec::new();
+    for (i, raw) in src.lines().enumerate() {
+        let t = raw.trim_start();
+        let (kind, kw) = if t.starts_with("विधि ") || t.starts_with("शुद्ध विधि ") || t.starts_with("साझा विधि ") {
+            ("function", "विधि")
+        } else if t.starts_with("वर्ग ") || t.starts_with("सार वर्ग ") {
+            ("class", "वर्ग")
+        } else { continue; };
+        if let Some(rest) = t.split(kw).nth(1) {
+            let name: String = rest.trim().chars().take_while(|c| !"(:".contains(*c)).collect();
+            let name = name.trim().to_string();
+            if name.is_empty() { continue; }
+            items.push(format!("{{\"name\":{},\"kind\":{},\"line\":{}}}", json_str(&name), json_str(kind), i + 1));
+        }
+    }
+    format!("[{}]", items.join(","))
+}
+
+const KW_DOCS: &[(&str, &str)] = &[
+    ("बताओ", "print with newline"), ("लिखो", "print inline"), ("विधि", "function definition"),
+    ("फल", "return"), ("उत्पन्न", "yield (generator)"), ("प्रतीक्षा", "await (async)"),
+    ("यदि", "if"), ("अन्यथा", "else"), ("जब", "जब तक — while"), ("बार", "N बार करो — repeat"),
+    ("वर्ग", "class"), ("कोशिश", "try"), ("पकड़ो", "catch"), ("फेंको", "throw"),
+    ("आयात", "import"), ("लाम्डा", "lambda"), ("जाँचो", "assert"), ("स्थिर", "const"),
+    ("सत्य", "true"), ("असत्य", "false"), ("और", "and"), ("या", "or"), ("नहीं", "not"),
+];
+const BUILTINS: &[&str] = &[
+    "लम्बाई", "पूर्णांक", "वाक्य", "पढ़ो", "यादृच्छिक", "निरपेक्ष", "घात", "वर्गमूल", "गोल",
+    "मानचित्र", "छानो", "मोड़ो", "प्रकार", "स्वरूप", "यूआईडी", "स्मरण", "आंशिक", "संयोजित",
+    "आगे", "सूची_में", "सोओ", "चलाओ", "इकट्ठा", "सामान्यीकृत", "पूर्ण_है", "क्रमित_कोश",
+];
+
+/// Completion items as JSON: [{"label":"..","detail":"..","kind":"keyword|function"}].
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_completions() -> String {
+    let mut items = Vec::new();
+    for (kw, doc) in KW_DOCS {
+        items.push(format!("{{\"label\":{},\"detail\":{},\"kind\":\"keyword\"}}", json_str(kw), json_str(doc)));
+    }
+    for b in BUILTINS {
+        items.push(format!("{{\"label\":{},\"detail\":\"builtin\",\"kind\":\"function\"}}", json_str(b)));
+    }
+    format!("[{}]", items.join(","))
+}
+
+/// Hover documentation for a word (keyword or builtin), or "" if unknown.
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_hover(word: &str) -> String {
+    if let Some((_, doc)) = KW_DOCS.iter().find(|(k, _)| *k == word) {
+        return format!("**{}** — {}", word, doc);
+    }
+    if BUILTINS.contains(&word) {
+        return format!("**{}** — अंतर्निहित फलन (builtin)", word);
+    }
+    String::new()
+}

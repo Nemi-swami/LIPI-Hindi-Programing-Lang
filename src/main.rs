@@ -23,6 +23,7 @@ mod docgen;
 mod pkg;
 mod lsp;
 mod flame;
+mod ide;
 
 use std::io::{self, BufRead, Write};
 
@@ -482,6 +483,10 @@ fn main() {
 
         // lipi lsp → Language Server Protocol over stdio (Phase 17D)
         [_, cmd] if cmd == "lsp" => lsp::run(),
+
+        // lipi ide [--no-open] → launch LIPI Studio (browser IDE) (Phase 18)
+        [_, cmd] if cmd == "ide" => ide::run(true),
+        [_, cmd, flag] if cmd == "ide" && flag == "--no-open" => ide::run(false),
 
         // lipi debug foo.swami → interactive line debugger (Phase 17D)
         [_, cmd, path] if cmd == "debug" => run_debug(path),
