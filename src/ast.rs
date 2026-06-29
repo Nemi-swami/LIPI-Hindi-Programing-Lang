@@ -184,6 +184,8 @@ pub enum Expr {
     Call { name: String, args: Vec<Expr> },
     /// func(अ, नाम=मान)  — call with keyword arguments (Phase 17)
     CallKw { name: String, args: Vec<Expr>, kwargs: Vec<(String, Expr)> },
+    /// प्रतीक्षा expr — await an async task (Phase 18). Suspends to the scheduler.
+    Await(Box<Expr>),
     MethodCall { object: Box<Expr>, method: String, args: Vec<Expr> },
     /// obj.method(अ, नाम=मान) — method call with keyword arguments (Phase 18)
     MethodCallKw { object: Box<Expr>, method: String, args: Vec<Expr>, kwargs: Vec<(String, Expr)> },

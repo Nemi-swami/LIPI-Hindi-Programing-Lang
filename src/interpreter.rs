@@ -420,6 +420,7 @@ impl Interpreter {
             }
 
             Expr::MethodCallKw { .. } => Err("कीवर्ड तर्क विधि कॉल LVM में चलाएं".into()),
+            Expr::Await(_) => Err("प्रतीक्षा (async) LVM में चलाएं".into()),
 
             // Phase 5 — tree-walk interpreter stubs (LVM is the default path)
             Expr::List(elems) => {

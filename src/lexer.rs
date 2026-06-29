@@ -12,6 +12,7 @@ pub enum TokenKind {
     Vidhi,     // विधि
     Fal,       // फल
     Utpann,    // उत्पन्न (yield)
+    Pratiksha, // प्रतीक्षा (await)
     Yadi,      // यदि
     Anyatha,   // अन्यथा
     SeAdhik,   // से अधिक
@@ -436,6 +437,7 @@ fn match_kw(word: &str, chars: &[char], pos: &mut usize, line: usize) -> Token {
         "विधि"     => TokenKind::Vidhi,
         "फल"       => TokenKind::Fal,
         "उत्पन्न"   => TokenKind::Utpann,
+        "प्रतीक्षा"  => TokenKind::Pratiksha,
         "यदि"      => TokenKind::Yadi,
         "अन्यथा" | "अन्य" => TokenKind::Anyatha,
         "बताओ"     => TokenKind::Batao,

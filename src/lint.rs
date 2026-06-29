@@ -375,6 +375,7 @@ fn vi(e: &Expr, out: &mut Vec<String>) {
         }
         Expr::MethodCall { object, args, .. } => { vi(object, out); for a in args { vi(a, out); } }
         Expr::MethodCallKw { object, args, kwargs, .. } => { vi(object, out); for a in args { vi(a, out); } for (_, v) in kwargs { vi(v, out); } }
+        Expr::Await(e) => vi(e, out),
         Expr::List(items) => for i in items { vi(i, out); },
         Expr::ListWithSpread(items) => for (_, i) in items { vi(i, out); },
         Expr::Dict(pairs) => for (k, val) in pairs { vi(k, out); vi(val, out); },
@@ -420,6 +421,7 @@ fn all_names(e: &Expr, out: &mut HashSet<String>) {
         }
         Expr::MethodCall { object, args, .. } => { all_names(object, out); for a in args { all_names(a, out); } }
         Expr::MethodCallKw { object, args, kwargs, .. } => { all_names(object, out); for a in args { all_names(a, out); } for (_, v) in kwargs { all_names(v, out); } }
+        Expr::Await(e) => all_names(e, out),
         Expr::List(items) => for i in items { all_names(i, out); },
         Expr::ListWithSpread(items) => for (_, i) in items { all_names(i, out); },
         Expr::Dict(pairs) => for (k, val) in pairs { all_names(k, out); all_names(val, out); },

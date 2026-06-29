@@ -67,6 +67,11 @@ struct GenState {
     done: bool,
 }
 
+enum Resumed {
+    Yielded(Value),
+    Done(Value),
+}
+
 // ── VM ────────────────────────────────────────────────────────────────────────
 
 pub struct LVM {
@@ -161,6 +166,8 @@ impl LVM {
         vm.native_fns.insert("पर्यावरण".into(), builtin_paryavaran);
         vm.native_fns.insert("वर्तमान_फोल्डर".into(), builtin_vartamaan_folder);
         vm.native_fns.insert("तर्क".into(), builtin_tark);
+        // Async sleep marker (Phase 18) — await सोओ(ms) suspends to the scheduler
+        vm.native_fns.insert("सोओ".into(), builtin_so);
         // Unicode NFC normalization for Devanagari (Phase 17)
         vm.native_fns.insert("सामान्यीकृत".into(), builtin_samanyikrit);
         // Integer predicate (Phase 17) — LIPI numbers are f64; पूर्ण_है tests
@@ -307,25 +314,34 @@ impl LVM {
     }
 
     fn resume_generator(&mut self, id: u64, instructions: &[Opcode]) -> Result<Option<Value>, String> {
+        match self.drive(id, None, instructions)? {
+            Resumed::Yielded(v) => Ok(Some(v)),
+            Resumed::Done(_) => Ok(None),
+        }
+    }
+
+    fn drive(&mut self, id: u64, send: Option<Value>, instructions: &[Opcode]) -> Result<Resumed, String> {
         let mut gs = match self.generators.remove(&id) {
             Some(g) => g,
             None => return Err("जनित्र अमान्य".into()),
         };
         if gs.done {
             self.generators.insert(id, gs);
-            return Ok(None);
+            return Ok(Resumed::Done(Value::Nil));
         }
         let base_stack = self.stack.len();
         let base_frames = self.call_frames.len();
         self.stack.append(&mut gs.stack);
         self.call_frames.append(&mut gs.frames);
+        if let Some(v) = send { self.stack.push(v); }
 
         let mut ip = gs.ip;
         let outcome;
         loop {
             if self.call_frames.len() <= base_frames || ip >= instructions.len() {
                 gs.done = true;
-                outcome = None;
+                let ret = if self.stack.len() > base_stack { self.stack.pop().unwrap_or(Value::Nil) } else { Value::Nil };
+                outcome = Resumed::Done(ret);
                 break;
             }
             let op = &instructions[ip];
@@ -342,7 +358,7 @@ impl LVM {
             }
             if self.yielded {
                 self.yielded = false;
-                outcome = Some(pop(&mut self.stack)?);
+                outcome = Resumed::Yielded(pop(&mut self.stack)?);
                 break;
             }
         }
@@ -356,6 +372,53 @@ impl LVM {
         }
         self.generators.insert(id, gs);
         Ok(outcome)
+    }
+
+    fn run_event_loop(&mut self, roots: Vec<u64>, instructions: &[Opcode]) -> Result<Vec<Value>, String> {
+        use std::collections::VecDeque;
+        use std::time::{Duration, Instant};
+        let mut ready: VecDeque<(u64, Option<Value>)> = VecDeque::new();
+        let mut sleeping: Vec<(Instant, u64)> = Vec::new();
+        let mut waiters: HashMap<u64, u64> = HashMap::new();
+        let mut results: HashMap<u64, Value> = HashMap::new();
+        for r in &roots { ready.push_back((*r, None)); }
+
+        loop {
+            if ready.is_empty() {
+                if sleeping.is_empty() { break; }
+                sleeping.sort_by_key(|(t, _)| *t);
+                let (wake, tid) = sleeping.remove(0);
+                let now = Instant::now();
+                if wake > now { std::thread::sleep(wake - now); }
+                ready.push_back((tid, Some(Value::Nil)));
+                continue;
+            }
+            let (tid, send) = ready.pop_front().unwrap();
+            match self.drive(tid, send, instructions)? {
+                Resumed::Done(val) => {
+                    results.insert(tid, val.clone());
+                    if let Some(awaiter) = waiters.remove(&tid) {
+                        ready.push_back((awaiter, Some(val)));
+                    }
+                }
+                Resumed::Yielded(y) => {
+                    match y {
+                        Value::Generator(child) => {
+                            waiters.insert(child, tid);
+                            ready.push_back((child, None));
+                        }
+                        Value::Dict(ref m) if m.contains_key("__नींद_मिलि__") => {
+                            let ms = match m.get("__नींद_मिलि__") { Some(Value::Number(n)) => *n as u64, _ => 0 };
+                            sleeping.push((Instant::now() + Duration::from_millis(ms), tid));
+                        }
+                        other => {
+                            ready.push_back((tid, Some(other)));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(roots.iter().map(|r| results.remove(r).unwrap_or(Value::Nil)).collect())
     }
 
     fn iter_step(&mut self, loop_var: &str, container_var: &str, idx_var: &str, instructions: &[Opcode]) -> Result<bool, String> {
@@ -940,6 +1003,26 @@ impl LVM {
                             }
                             other => return Err(format!("आगे(): जनित्र अपेक्षित, मिला: {}", other)),
                         }
+                    }
+                    else if name == "चलाओ" && argc == 1 {
+                        match args[0].clone() {
+                            Value::Generator(id) => {
+                                let res = self.run_event_loop(vec![id], instructions)?;
+                                self.stack.push(res.into_iter().next().unwrap_or(Value::Nil));
+                            }
+                            other => return Err(format!("चलाओ(): कार्य (async) अपेक्षित, मिला: {}", other)),
+                        }
+                    }
+                    else if name == "इकट्ठा" && argc >= 1 {
+                        let mut ids = Vec::with_capacity(argc);
+                        for a in &args {
+                            match a {
+                                Value::Generator(id) => ids.push(*id),
+                                other => return Err(format!("इकट्ठा(): कार्य अपेक्षित, मिला: {}", other)),
+                            }
+                        }
+                        let res = self.run_event_loop(ids, instructions)?;
+                        self.stack.push(Value::List(res));
                     }
                     else if name == "सूची_में" && argc == 1 {
                         let out = match args[0].clone() {
@@ -2100,6 +2183,16 @@ fn builtin_purna_hai(args: Vec<Value>) -> Result<Value, String> {
         Some(_) => Ok(Value::Bool(false)),
         None => Err("पूर्ण_है(): एक तर्क आवश्यक".to_string()),
     }
+}
+
+fn builtin_so(args: Vec<Value>) -> Result<Value, String> {
+    let ms = match args.first() {
+        Some(Value::Number(n)) => *n,
+        _ => return Err("सोओ(): मिलिसेकंड (संख्या) अपेक्षित".to_string()),
+    };
+    let mut m = HashMap::new();
+    m.insert("__नींद_मिलि__".to_string(), Value::Number(ms));
+    Ok(Value::Dict(m))
 }
 
 /// सामान्यीकृत(text) — normalize Devanagari to NFC (decompose precomposed nukta

@@ -28,6 +28,56 @@ fn stmt_has_yield(stmt: &Stmt) -> bool {
     }
 }
 
+fn body_is_coroutine(body: &[Stmt]) -> bool {
+    body_has_yield(body) || body.iter().any(stmt_has_await)
+}
+
+fn stmt_has_await(stmt: &Stmt) -> bool {
+    match unwrap_located(stmt) {
+        Stmt::Assign { value, .. } => expr_has_await(value),
+        Stmt::SthirDecl { value, .. } => expr_has_await(value),
+        Stmt::Print(e) | Stmt::Likho(e) | Stmt::Fal(e) | Stmt::Yield(e)
+            | Stmt::ExprStmt(e) | Stmt::Phenko(e) => expr_has_await(e),
+        Stmt::ChainAssign { value, .. } => expr_has_await(value),
+        Stmt::MultiAssign { values, .. } => values.iter().any(expr_has_await),
+        Stmt::AttrAssign { val, .. } => expr_has_await(val),
+        Stmt::IndexAssign { idx, val, .. } => expr_has_await(idx) || expr_has_await(val),
+        Stmt::Yadi { condition, then, otherwise } =>
+            expr_has_await(condition) || then.iter().any(stmt_has_await)
+                || otherwise.as_ref().is_some_and(|o| o.iter().any(stmt_has_await)),
+        Stmt::JabTak { condition, body } => expr_has_await(condition) || body.iter().any(stmt_has_await),
+        Stmt::BarKaro { count, body } => expr_has_await(count) || body.iter().any(stmt_has_await),
+        Stmt::KeeLiye { iter, body, .. } => expr_has_await(iter) || body.iter().any(stmt_has_await),
+        Stmt::Saath { expr, body, .. } => expr_has_await(expr) || body.iter().any(stmt_has_await),
+        Stmt::TryCatch { body, clauses } =>
+            body.iter().any(stmt_has_await) || clauses.iter().any(|c: &CatchClause| c.body.iter().any(stmt_has_await)),
+        Stmt::Milao { subject, arms } =>
+            expr_has_await(subject) || arms.iter().any(|a: &MilaoArm| a.body.iter().any(stmt_has_await)),
+        Stmt::Jancho { expr, .. } => expr_has_await(expr),
+        _ => false,
+    }
+}
+
+fn expr_has_await(e: &Expr) -> bool {
+    match e {
+        Expr::Await(_) => true,
+        Expr::Binary { left, right, .. } | Expr::Compare { left, right, .. } => expr_has_await(left) || expr_has_await(right),
+        Expr::Call { args, .. } => args.iter().any(expr_has_await),
+        Expr::CallKw { args, kwargs, .. } => args.iter().any(expr_has_await) || kwargs.iter().any(|(_, v)| expr_has_await(v)),
+        Expr::MethodCall { object, args, .. } => expr_has_await(object) || args.iter().any(expr_has_await),
+        Expr::MethodCallKw { object, args, kwargs, .. } => expr_has_await(object) || args.iter().any(expr_has_await) || kwargs.iter().any(|(_, v)| expr_has_await(v)),
+        Expr::List(xs) => xs.iter().any(expr_has_await),
+        Expr::ListWithSpread(xs) => xs.iter().any(|(_, x)| expr_has_await(x)),
+        Expr::Dict(ps) => ps.iter().any(|(k, v)| expr_has_await(k) || expr_has_await(v)),
+        Expr::Index { obj, idx } => expr_has_await(obj) || expr_has_await(idx),
+        Expr::Attr { obj, .. } => expr_has_await(obj),
+        Expr::Ternary { condition, then_val, else_val } => expr_has_await(condition) || expr_has_await(then_val) || expr_has_await(else_val),
+        Expr::BitNot(x) | Expr::Not(x) | Expr::Walrus { value: x, .. } => expr_has_await(x),
+        Expr::Membership { item, container, .. } => expr_has_await(item) || expr_has_await(container),
+        _ => false,
+    }
+}
+
 pub struct Compiler {
     instructions: Vec<Opcode>,
     /// Source line per instruction, parallel to `instructions` (Phase 17 diagnostics)
@@ -337,7 +387,7 @@ impl Compiler {
                 // Generator functions (body contains उत्पन्न) are true coroutines
                 // (Phase 18): calling one returns a lazy Value::Generator; उत्पन्न
                 // suspends the VM and resumes on demand. No TCO inside generators.
-                let is_gen = body_has_yield(body);
+                let is_gen = body_is_coroutine(body);
 
                 self.functions.insert(
                     reg_name.clone(),
@@ -662,7 +712,7 @@ impl Compiler {
                             (fp, df)
                         };
 
-                        let method_is_gen = body_has_yield(body);
+                        let method_is_gen = body_is_coroutine(body);
                         self.functions.insert(
                             format!("{}::{}", class_name, method_name),
                             FuncDef { params: full_params, start_ip, vararg: vararg.clone(), defaults, is_generator: method_is_gen },
@@ -1063,6 +1113,11 @@ impl Compiler {
                 let class = if let Expr::Ident(c) = object.as_ref() { c.clone() } else { unreachable!() };
                 for arg in args { self.compile_expr(arg); }
                 self.emit(Opcode::Call(format!("{}::{}", class, method), args.len()));
+            }
+
+            Expr::Await(inner) => {
+                self.compile_expr(inner);
+                self.emit(Opcode::Yield);
             }
 
             Expr::MethodCall { object, method, args } => {

@@ -912,6 +912,10 @@ impl Parser {
     }
 
     fn primary_atom(&mut self) -> Result<Expr, String> {
+        if matches!(self.peek().kind, TokenKind::Pratiksha) {
+            self.advance();
+            return Ok(Expr::Await(Box::new(self.unary()?)));
+        }
         let tok = self.advance();
         match tok.kind {
             TokenKind::Number(n) => Ok(Expr::Number(n)),
