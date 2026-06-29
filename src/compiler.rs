@@ -230,48 +230,31 @@ impl Compiler {
             // Works with: Number (0..N range), List (elements), Str (characters)
             Stmt::KeeLiye { var, iter, body } => {
                 let id = self.fresh_id();
-                let val_var = format!("__kl{id}_val__"); // the iterable
-                let lim_var = format!("__kl{id}_lim__"); // its length
-                let idx_var = format!("__kl{id}_idx__"); // current index
+                let val_var = format!("__kl{id}_val__");
+                let idx_var = format!("__kl{id}_idx__");
 
-                // Store iterable, then get its length
                 self.compile_expr(iter);
                 self.emit(Opcode::StoreVar(val_var.clone()));
-
-                self.emit(Opcode::LoadVar(val_var.clone()));
-                self.emit(Opcode::GetIterLen);
-                self.emit(Opcode::StoreVar(lim_var.clone()));
-
                 self.emit(Opcode::Push(LvmValue::Number(0.0)));
                 self.emit(Opcode::StoreVar(idx_var.clone()));
 
                 let loop_start = self.here();
-                self.emit(Opcode::LoadVar(idx_var.clone()));
-                self.emit(Opcode::LoadVar(lim_var.clone()));
-                self.emit(Opcode::Lt);
+                self.emit(Opcode::IterStep {
+                    loop_var: var.clone(),
+                    container_var: val_var.clone(),
+                    idx_var: idx_var.clone(),
+                });
                 let jif = self.emit(Opcode::JumpIfFalse(0));
 
-                // Get the current element in place — no container clone per
-                // iteration (was LoadVar+LoadVar+GetIterItem before Phase 17 perf)
-                self.emit(Opcode::IterNext(val_var.clone(), idx_var.clone()));
-                self.emit(Opcode::StoreVar(var.clone()));
-
                 self.break_sites.push(vec![]);
-                self.continue_stack.push((None, vec![])); // increment addr TBD
+                self.continue_stack.push((Some(loop_start), vec![]));
 
                 for s in body { self.compile_stmt(s); }
 
-                // Increment — अगला (continue) jumps here
-                let increment_addr = self.here();
                 let (_, cont_sites) = self.continue_stack.pop().unwrap();
-                for site in cont_sites { self.patch(site, Opcode::Jump(increment_addr)); }
+                for site in cont_sites { self.patch(site, Opcode::Jump(loop_start)); }
 
-                self.emit(Opcode::LoadVar(idx_var.clone()));
-                self.emit(Opcode::Push(LvmValue::Number(1.0)));
-                self.emit(Opcode::Add);
-                self.emit(Opcode::StoreVar(idx_var));
                 self.emit(Opcode::Jump(loop_start));
-
                 let end = self.here();
                 self.patch(jif, Opcode::JumpIfFalse(end));
                 for site in self.break_sites.pop().unwrap() {
@@ -347,6 +330,11 @@ impl Compiler {
                 let jmp = self.emit(Opcode::Jump(0));
                 let start_ip = self.here();
 
+                // Generator functions (body contains उत्पन्न) are true coroutines
+                // (Phase 18): calling one returns a lazy Value::Generator; उत्पन्न
+                // suspends the VM and resumes on demand. No TCO inside generators.
+                let is_gen = body_has_yield(body);
+
                 self.functions.insert(
                     reg_name.clone(),
                     FuncDef {
@@ -354,33 +342,20 @@ impl Compiler {
                         start_ip,
                         vararg: vararg.clone(),
                         defaults: params.iter().map(|p| p.default.as_ref().map(default_to_lvm)).collect(),
+                        is_generator: is_gen,
                     },
                 );
 
-                // Generator functions (containing उत्पन्न) collect yielded values
-                // into a hidden accumulator list and return it on fall-through /
-                // फल. The accumulator is a frame-local, so recursion is safe.
-                let is_gen = body_has_yield(body);
                 let prev_gen = self.in_generator;
                 self.in_generator = is_gen;
-                if is_gen {
-                    self.emit(Opcode::MakeList(0));
-                    self.emit(Opcode::StoreVar("__gen_acc__".to_string()));
-                }
-
                 self.in_function += 1;
                 for s in body { self.compile_stmt(s); }
                 self.in_function -= 1;
-                if is_gen {
-                    // Fall-through end of a generator returns the accumulator
-                    self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
-                    self.emit(Opcode::Return);
-                } else {
-                    // Implicit Nil return for functions that fall through
-                    self.emit(Opcode::Push(LvmValue::Nil));
-                    self.emit(Opcode::Return);
-                }
                 self.in_generator = prev_gen;
+                // Implicit Nil return on fall-through (for a generator this just
+                // ends iteration — the फल/return value is discarded by the resumer)
+                self.emit(Opcode::Push(LvmValue::Nil));
+                self.emit(Opcode::Return);
 
                 self.patch(jmp, Opcode::Jump(self.here()));
 
@@ -408,20 +383,19 @@ impl Compiler {
                 }
             }
 
-            // उत्पन्न expr — yield: append the value to the generator accumulator
+            // उत्पन्न expr — yield: leave the value on the stack and suspend the
+            // running generator (Phase 18 coroutine). The resumer pops the value.
             Stmt::Yield(expr) => {
-                self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
                 self.compile_expr(expr);
-                self.emit(Opcode::MethodCall("जोड़ो".to_string(), 1));
-                self.emit(Opcode::StoreVar("__gen_acc__".to_string()));
+                self.emit(Opcode::Yield);
             }
 
             // फल expr — explicit return; use TailCall when possible (Phase 15 TCO)
             Stmt::Fal(expr) => {
-                // Inside a generator, फल stops collection and returns the
-                // accumulated values; the फल expression is ignored (early stop).
+                // Inside a generator, फल ends iteration (its value is discarded by
+                // the resumer). No TCO inside a generator.
                 if self.in_generator {
-                    self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
+                    self.compile_expr(expr);
                     self.emit(Opcode::Return);
                     return;
                 }
@@ -652,14 +626,18 @@ impl Compiler {
                             (fp, df)
                         };
 
+                        let method_is_gen = body_has_yield(body);
                         self.functions.insert(
                             format!("{}::{}", class_name, method_name),
-                            FuncDef { params: full_params, start_ip, vararg: vararg.clone(), defaults },
+                            FuncDef { params: full_params, start_ip, vararg: vararg.clone(), defaults, is_generator: method_is_gen },
                         );
 
+                        let prev_gen = self.in_generator;
+                        self.in_generator = method_is_gen;
                         self.in_function += 1;
                         for s in body { self.compile_stmt(s); }
                         self.in_function -= 1;
+                        self.in_generator = prev_gen;
 
                         // बनाओ (constructor) returns यह implicitly
                         if method_name == "बनाओ" && !*is_static {
@@ -1103,7 +1081,7 @@ impl Compiler {
                 // Compile the lambda body as an inline function (skipped by Jump)
                 let jmp = self.emit(Opcode::Jump(0));
                 let start_ip = self.here();
-                self.functions.insert(lam_name.clone(), FuncDef { params: params.clone(), start_ip, vararg: None, defaults: vec![None; params.len()] });
+                self.functions.insert(lam_name.clone(), FuncDef { params: params.clone(), start_ip, vararg: None, defaults: vec![None; params.len()], is_generator: false });
                 for s in body { self.compile_stmt(s); }
                 self.emit(Opcode::Push(LvmValue::Nil));
                 self.emit(Opcode::Return);

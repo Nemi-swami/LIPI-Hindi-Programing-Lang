@@ -12,6 +12,9 @@ pub struct FuncDef {
     /// Per-param constant default values, parallel to `params` (Phase 17).
     /// `None` = required parameter; missing trailing args are filled at call time.
     pub defaults: Vec<Option<LvmValue>>,
+    /// True if the body contains `उत्पन्न` — calling it returns a lazy generator
+    /// object instead of running the body (Phase 18 — true coroutines).
+    pub is_generator: bool,
 }
 
 /// Values that can be encoded directly in Push instructions.
@@ -189,4 +192,15 @@ pub enum Opcode {
     /// does it match this error class (or one of its subclasses)?
     /// Str errors match only the base class त्रुटि.
     MatchErrClass(String),
+
+    // ── Phase 18: lazy generators (true coroutines) ──────────────────────────
+    /// उत्पन्न — suspend the running generator, leaving the yielded value on the
+    /// stack for the resumer (set inside `resume_generator`'s loop). Tag 0x4A.
+    Yield,
+    /// Unified for-loop step: advance an iterable held in `container_var` (List/
+    /// Str/Dict/Number range OR a lazy Generator), store the next element into
+    /// `loop_var`, and push Bool — true if a value was produced, false if the
+    /// iterable is exhausted. `idx_var` tracks position for indexable types
+    /// (ignored for generators). Tag 0x4B. (Phase 18)
+    IterStep { loop_var: String, container_var: String, idx_var: String },
 }

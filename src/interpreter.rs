@@ -25,6 +25,8 @@ pub enum Value {
     EnumDef { name: String, variants: HashMap<String, usize> },
     /// Enum instance — a specific variant with payload values (Phase 15)
     Enum { enum_name: String, variant: String, values: Vec<Value> },
+    /// Lazy generator handle — id into the VM's generator registry (Phase 18)
+    Generator(u64),
 }
 
 impl std::fmt::Display for Value {
@@ -88,6 +90,7 @@ impl std::fmt::Display for Value {
                 }
                 write!(f, ">")
             }
+            Value::Generator(_) => write!(f, "<जनित्र>"),
         }
     }
 }
@@ -780,6 +783,7 @@ fn is_truthy(v: &Value) -> bool {
         Value::Closure { .. }   => true,
         Value::EnumDef { .. }   => true,
         Value::Enum { .. }      => true,
+        Value::Generator(_)     => true,
     }
 }
 

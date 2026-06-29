@@ -60,6 +60,13 @@ struct TryFrame {
     frame_depth: usize,
 }
 
+struct GenState {
+    ip: usize,
+    stack: Vec<Value>,
+    frames: Vec<Frame>,
+    done: bool,
+}
+
 // ── VM ────────────────────────────────────────────────────────────────────────
 
 pub struct LVM {
@@ -81,6 +88,9 @@ pub struct LVM {
     /// Lives on the VM so cache survives across calls (closure captures only the id).
     memo_caches: HashMap<u64, HashMap<String, Value>>,
     memo_next: u64,
+    generators: HashMap<u64, GenState>,
+    gen_next: u64,
+    yielded: bool,
     /// When `capture` is true, Print writes here instead of stdout.
     pub output: String,
     capture: bool,
@@ -101,6 +111,9 @@ impl LVM {
             constants: std::collections::HashSet::new(),
             memo_caches: HashMap::new(),
             memo_next: 0,
+            generators: HashMap::new(),
+            gen_next: 0,
+            yielded: false,
             output: String::new(),
             capture: false,
         };
@@ -255,6 +268,124 @@ impl LVM {
         self.call_frames.last()
             .and_then(|f| f.locals.get(name))
             .or_else(|| self.globals.get(name))
+    }
+
+    fn set_var(&mut self, name: &str, val: Value) -> Result<(), String> {
+        if self.constants.contains(name) {
+            return Err(format!("स्थिर '{}' को बदला नहीं जा सकता (Samkhya: नित्यम्)", name));
+        }
+        if self.call_frames.is_empty() {
+            self.globals.insert(name.to_string(), val);
+            return Ok(());
+        }
+        let is_global = self.call_frames.last().map_or(false, |f| f.global_names.contains(name));
+        if is_global {
+            self.globals.insert(name.to_string(), val);
+            return Ok(());
+        }
+        let in_locals = self.call_frames.last().map_or(false, |f| f.locals.contains_key(name));
+        if in_locals || !self.globals.contains_key(name) {
+            if let Some(f) = self.call_frames.last_mut() { f.locals.insert(name.to_string(), val); }
+        } else {
+            self.globals.insert(name.to_string(), val);
+        }
+        Ok(())
+    }
+
+    fn make_generator(&mut self, start_ip: usize, locals: HashMap<String, Value>, name: String) -> Value {
+        let id = self.gen_next;
+        self.gen_next += 1;
+        let frame = Frame {
+            return_addr: usize::MAX,
+            locals,
+            global_names: std::collections::HashSet::new(),
+            base_stack_depth: 0,
+            func_name: name,
+        };
+        self.generators.insert(id, GenState { ip: start_ip, stack: Vec::new(), frames: vec![frame], done: false });
+        Value::Generator(id)
+    }
+
+    fn resume_generator(&mut self, id: u64, instructions: &[Opcode]) -> Result<Option<Value>, String> {
+        let mut gs = match self.generators.remove(&id) {
+            Some(g) => g,
+            None => return Err("जनित्र अमान्य".into()),
+        };
+        if gs.done {
+            self.generators.insert(id, gs);
+            return Ok(None);
+        }
+        let base_stack = self.stack.len();
+        let base_frames = self.call_frames.len();
+        self.stack.append(&mut gs.stack);
+        self.call_frames.append(&mut gs.frames);
+
+        let mut ip = gs.ip;
+        let outcome;
+        loop {
+            if self.call_frames.len() <= base_frames || ip >= instructions.len() {
+                gs.done = true;
+                outcome = None;
+                break;
+            }
+            let op = &instructions[ip];
+            ip += 1;
+            match self.exec_op(op, &mut ip, instructions) {
+                Ok(_) => {}
+                Err(e) => {
+                    self.stack.truncate(base_stack);
+                    self.call_frames.truncate(base_frames);
+                    gs.done = true;
+                    self.generators.insert(id, gs);
+                    return Err(e);
+                }
+            }
+            if self.yielded {
+                self.yielded = false;
+                outcome = Some(pop(&mut self.stack)?);
+                break;
+            }
+        }
+        if gs.done {
+            self.stack.truncate(base_stack);
+            self.call_frames.truncate(base_frames);
+        } else {
+            gs.ip = ip;
+            gs.stack = self.stack.split_off(base_stack);
+            gs.frames = self.call_frames.split_off(base_frames);
+        }
+        self.generators.insert(id, gs);
+        Ok(outcome)
+    }
+
+    fn iter_step(&mut self, loop_var: &str, container_var: &str, idx_var: &str, instructions: &[Opcode]) -> Result<bool, String> {
+        if let Some(Value::Generator(id)) = self.var_ref(container_var).cloned() {
+            return match self.resume_generator(id, instructions)? {
+                Some(v) => { self.set_var(loop_var, v)?; Ok(true) }
+                None => Ok(false),
+            };
+        }
+        let idx = match self.var_ref(idx_var) {
+            Some(Value::Number(n)) => *n as usize,
+            _ => return Err("IterStep: अनुक्रमणिका अमान्य".into()),
+        };
+        let item = match self.var_ref(container_var) {
+            Some(Value::Number(n)) => { if idx >= *n as usize { return Ok(false); } Value::Number(idx as f64) }
+            Some(Value::List(v)) => { if idx >= v.len() { return Ok(false); } v[idx].clone() }
+            Some(Value::Str(s)) => {
+                match s.chars().nth(idx) { Some(c) => Value::Str(c.to_string()), None => return Ok(false) }
+            }
+            Some(Value::Dict(m)) => {
+                let mut keys: Vec<&String> = m.keys().collect();
+                keys.sort();
+                match keys.get(idx) { Some(k) => Value::Str((*k).clone()), None => return Ok(false) }
+            }
+            Some(other) => return Err(format!("'{}' पर 'के लिए' नहीं चल सकता", other)),
+            None => return Err(format!("'{}' परिभाषित नहीं है", container_var)),
+        };
+        self.set_var(loop_var, item)?;
+        self.set_var(idx_var, Value::Number((idx + 1) as f64))?;
+        Ok(true)
     }
 
     /// Walk the inheritance chain from `class` upward (inclusive) looking for
@@ -572,34 +703,7 @@ impl LVM {
 
                 Opcode::StoreVar(name) => {
                     let val = pop(&mut self.stack)?;
-                    // स्थिर check: immutable constant cannot be reassigned
-                    if self.constants.contains(name) {
-                        return Err(format!("स्थिर '{}' को बदला नहीं जा सकता (Samkhya: नित्यम्)", name));
-                    }
-                    let in_frame = !self.call_frames.is_empty();
-
-                    if in_frame {
-                        let is_declared_global = self.call_frames.last()
-                            .map_or(false, |f| f.global_names.contains(name));
-
-                        if is_declared_global {
-                            self.globals.insert(name.clone(), val);
-                        } else {
-                            let in_locals = self.call_frames.last()
-                                .map_or(false, |f| f.locals.contains_key(name));
-                            let in_globals = self.globals.contains_key(name);
-
-                            if in_locals || !in_globals {
-                                if let Some(f) = self.call_frames.last_mut() {
-                                    f.locals.insert(name.clone(), val);
-                                }
-                            } else {
-                                self.globals.insert(name.clone(), val);
-                            }
-                        }
-                    } else {
-                        self.globals.insert(name.clone(), val);
-                    }
+                    self.set_var(name, val)?;
                 }
 
                 // ── Arithmetic ─────────────────────────────────────────────
@@ -732,7 +836,6 @@ impl LVM {
                     args.reverse();
 
                     if let Some(func) = self.functions.get(name).cloned() {
-                        // ip is already pre-incremented = return address
                         let mut locals = HashMap::new();
                         let regular = func.params.len();
                         for (param, arg) in func.params.iter().zip(args.iter()) {
@@ -740,9 +843,13 @@ impl LVM {
                         }
                         fill_defaults(&mut locals, &func, args.len());
                         if let Some(ref vname) = func.vararg {
-                            // Pack extra args into a list
                             let rest: Vec<Value> = args.into_iter().skip(regular).collect();
                             locals.insert(vname.clone(), Value::List(rest));
+                        }
+                        if func.is_generator {
+                            let g = self.make_generator(func.start_ip, locals, name.clone());
+                            self.stack.push(g);
+                            return Ok(false);
                         }
                         self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone() })?;
                         *ip = func.start_ip;
@@ -784,6 +891,32 @@ impl LVM {
                     else if let Some(native) = self.native_fns.get(name).copied() {
                         let result = native(args)?;
                         self.stack.push(result);
+                    }
+                    else if name == "आगे" && argc == 1 {
+                        let g = args[0].clone();
+                        match g {
+                            Value::Generator(id) => {
+                                let v = self.resume_generator(id, instructions)?.unwrap_or(Value::Nil);
+                                self.stack.push(v);
+                            }
+                            other => return Err(format!("आगे(): जनित्र अपेक्षित, मिला: {}", other)),
+                        }
+                    }
+                    else if name == "सूची_में" && argc == 1 {
+                        let out = match args[0].clone() {
+                            Value::Generator(id) => {
+                                let mut v = Vec::new();
+                                while let Some(item) = self.resume_generator(id, instructions)? {
+                                    check_list_len(v.len() + 1)?;
+                                    v.push(item);
+                                }
+                                Value::List(v)
+                            }
+                            Value::List(v) => Value::List(v),
+                            Value::Str(s) => Value::List(s.chars().map(|c| Value::Str(c.to_string())).collect()),
+                            other => return Err(format!("सूची_में(): जनित्र/सूची/वाक्य अपेक्षित, मिला: {}", other)),
+                        };
+                        self.stack.push(out);
                     }
                     // HOF meta-functions (मानचित्र, छानो, मोड़ो) — need VM access to call closures
                     else if name == "मानचित्र" && argc == 2 {
@@ -1747,6 +1880,15 @@ impl LVM {
                     };
                     self.stack.push(item);
                 }
+
+                Opcode::Yield => {
+                    self.yielded = true;
+                }
+
+                Opcode::IterStep { loop_var, container_var, idx_var } => {
+                    let produced = self.iter_step(loop_var, container_var, idx_var, instructions)?;
+                    self.stack.push(Value::Bool(produced));
+                }
             }
         Ok(false)
     }
@@ -2009,6 +2151,7 @@ fn truthy(v: &Value) -> bool {
         Value::Closure { .. }    => true,
         Value::EnumDef { .. }    => true,
         Value::Enum { .. }       => true,
+        Value::Generator(_)      => true,
     }
 }
 
@@ -2712,6 +2855,7 @@ fn builtin_prakar(args: Vec<Value>) -> Result<Value, String> {
         Some(Value::Closure { .. })    => "विधि",
         Some(Value::EnumDef { .. })    => "विकल्प_प्रकार",
         Some(Value::Enum { .. })       => "विकल्प",
+        Some(Value::Generator(_))      => "जनित्र",
     };
     Ok(Value::Str(name.to_string()))
 }

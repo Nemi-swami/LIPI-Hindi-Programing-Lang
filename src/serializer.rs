@@ -96,6 +96,8 @@ const TAG_MAKE_LIST_SP:   u8 = 0x46; // + u8 count + count× u8 flag (0/1) — s
 const TAG_THROW:          u8 = 0x47; // no payload — फेंको / rethrow (Phase 17A typed exceptions)
 const TAG_MATCH_ERR_CLASS: u8 = 0x48; // + str class_name — typed पकड़ो dispatch (Phase 17A)
 const TAG_ITER_NEXT:      u8 = 0x49; // + str container_var + str index_var — in-place loop step (Phase 17 perf)
+const TAG_YIELD:          u8 = 0x4A; // no payload — उत्पन्न (Phase 18 generators)
+const TAG_ITER_STEP:      u8 = 0x4B; // + str loop_var + str container_var + str idx_var (Phase 18)
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -103,9 +105,9 @@ const TAG_ITER_NEXT:      u8 = 0x49; // + str container_var + str index_var — 
 pub fn save(program: &CompiledProgram, path: &str) -> Result<(), String> {
     let mut buf: Vec<u8> = Vec::new();
 
-    // Magic + version (v4: instruction line table — Phase 17 diagnostics)
+    // Magic + version (v5: per-function is_generator flag — Phase 18)
     buf.extend_from_slice(b"LIPI");
-    write_u8(&mut buf, 4);
+    write_u8(&mut buf, 5);
 
     // Function table (sorted by name for determinism)
     let mut funcs: Vec<(&String, &FuncDef)> = program.functions.iter().collect();
@@ -129,6 +131,7 @@ pub fn save(program: &CompiledProgram, path: &str) -> Result<(), String> {
             Some(v) => { write_u8(&mut buf, 1); write_str(&mut buf, v); }
         }
         write_u64(&mut buf, def.start_ip as u64);
+        write_u8(&mut buf, if def.is_generator { 1 } else { 0 });
     }
 
     // v3: class inheritance table (child → parent), sorted for determinism
@@ -169,7 +172,7 @@ pub fn load(path: &str) -> Result<CompiledProgram, String> {
     pos += 4;
 
     let version = read_u8(&data, &mut pos)?;
-    if !(2..=4).contains(&version) {
+    if !(2..=5).contains(&version) {
         return Err(format!("असमर्थित bytecode संस्करण: {}", version));
     }
 
@@ -194,7 +197,8 @@ pub fn load(path: &str) -> Result<CompiledProgram, String> {
         let vararg_flag = read_u8(&data, &mut pos)?;
         let vararg = if vararg_flag == 1 { Some(read_str(&data, &mut pos)?) } else { None };
         let start_ip = read_u64(&data, &mut pos)? as usize;
-        functions.insert(name, FuncDef { params, start_ip, vararg, defaults });
+        let is_generator = if version >= 5 { read_u8(&data, &mut pos)? == 1 } else { false };
+        functions.insert(name, FuncDef { params, start_ip, vararg, defaults, is_generator });
     }
 
     // v3: class inheritance table — v2 files have none (inheritance broke in old .libc)
@@ -365,6 +369,13 @@ fn encode_op(buf: &mut Vec<u8>, op: &Opcode) -> Result<(), String> {
             write_str(buf, cvar);
             write_str(buf, ivar);
         }
+        Opcode::Yield => write_u8(buf, TAG_YIELD),
+        Opcode::IterStep { loop_var, container_var, idx_var } => {
+            write_u8(buf, TAG_ITER_STEP);
+            write_str(buf, loop_var);
+            write_str(buf, container_var);
+            write_str(buf, idx_var);
+        }
     }
     Ok(())
 }
@@ -523,6 +534,13 @@ fn decode_op(data: &[u8], pos: &mut usize) -> Result<Opcode, String> {
             let cvar = read_str(data, pos)?;
             let ivar = read_str(data, pos)?;
             Opcode::IterNext(cvar, ivar)
+        }
+        TAG_YIELD => Opcode::Yield,
+        TAG_ITER_STEP => {
+            let loop_var = read_str(data, pos)?;
+            let container_var = read_str(data, pos)?;
+            let idx_var = read_str(data, pos)?;
+            Opcode::IterStep { loop_var, container_var, idx_var }
         }
 
         other => return Err(format!("अज्ञात opcode tag: 0x{:02X}", other)),
