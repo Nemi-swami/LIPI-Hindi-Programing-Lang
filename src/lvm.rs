@@ -376,22 +376,35 @@ impl LVM {
 
     fn run_event_loop(&mut self, roots: Vec<u64>, instructions: &[Opcode]) -> Result<Vec<Value>, String> {
         use std::collections::VecDeque;
-        use std::time::{Duration, Instant};
         let mut ready: VecDeque<(u64, Option<Value>)> = VecDeque::new();
-        let mut sleeping: Vec<(Instant, u64)> = Vec::new();
         let mut waiters: HashMap<u64, u64> = HashMap::new();
         let mut results: HashMap<u64, Value> = HashMap::new();
         for r in &roots { ready.push_back((*r, None)); }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut sleeping: Vec<(std::time::Instant, u64)> = Vec::new();
+        #[cfg(target_arch = "wasm32")]
+        let mut sleeping: VecDeque<u64> = VecDeque::new();
+
         loop {
             if ready.is_empty() {
-                if sleeping.is_empty() { break; }
-                sleeping.sort_by_key(|(t, _)| *t);
-                let (wake, tid) = sleeping.remove(0);
-                let now = Instant::now();
-                if wake > now { std::thread::sleep(wake - now); }
-                ready.push_back((tid, Some(Value::Nil)));
-                continue;
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    if sleeping.is_empty() { break; }
+                    sleeping.sort_by_key(|(t, _)| *t);
+                    let (wake, tid) = sleeping.remove(0);
+                    let now = std::time::Instant::now();
+                    if wake > now { std::thread::sleep(wake - now); }
+                    ready.push_back((tid, Some(Value::Nil)));
+                    continue;
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    match sleeping.pop_front() {
+                        Some(tid) => { ready.push_back((tid, Some(Value::Nil))); continue; }
+                        None => break,
+                    }
+                }
             }
             let (tid, send) = ready.pop_front().unwrap();
             match self.drive(tid, send, instructions)? {
@@ -408,8 +421,13 @@ impl LVM {
                             ready.push_back((child, None));
                         }
                         Value::Dict(ref m) if m.contains_key("__नींद_मिलि__") => {
-                            let ms = match m.get("__नींद_मिलि__") { Some(Value::Number(n)) => *n as u64, _ => 0 };
-                            sleeping.push((Instant::now() + Duration::from_millis(ms), tid));
+                            #[cfg(not(target_arch = "wasm32"))]
+                            {
+                                let ms = match m.get("__नींद_मिलि__") { Some(Value::Number(n)) => *n as u64, _ => 0 };
+                                sleeping.push((std::time::Instant::now() + std::time::Duration::from_millis(ms), tid));
+                            }
+                            #[cfg(target_arch = "wasm32")]
+                            sleeping.push_back(tid);
                         }
                         other => {
                             ready.push_back((tid, Some(other)));
@@ -2405,10 +2423,13 @@ fn builtin_nirgam(args: Vec<Value>) -> Result<Value, String> {
 static RAND_STATE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn init_rand() {
+    #[cfg(not(target_arch = "wasm32"))]
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(42);
+    #[cfg(target_arch = "wasm32")]
+    let seed = RAND_STATE.load(std::sync::atomic::Ordering::Relaxed).wrapping_add(0x9E3779B97F4A7C15);
     RAND_STATE.store(seed, std::sync::atomic::Ordering::Relaxed);
 }
 

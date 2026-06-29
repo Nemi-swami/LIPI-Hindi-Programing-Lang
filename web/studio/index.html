@@ -177,6 +177,13 @@ require(['vs/editor/editor.main'], function () {
       return { contents: [{ value: doc }] };
     }
   });
+  monaco.languages.registerDocumentFormattingEditProvider('lipi', {
+    provideDocumentFormattingEdits(model) {
+      if (!wasm) return [];
+      const formatted = wasm.lipi_format(model.getValue());
+      return [{ range: model.getFullModelRange(), text: formatted }];
+    }
+  });
 
   editor = monaco.editor.create(document.getElementById('editor'), {
     value: files[active], language: 'lipi', theme: 'lipi-dark',
@@ -188,6 +195,7 @@ require(['vs/editor/editor.main'], function () {
     document.getElementById('st-pos').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
   });
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, run);
+  window.editor = editor;
   renderTabs(); renderSidebar();
 });
 
@@ -203,7 +211,7 @@ if (location.protocol === 'file:') {
 } else {
   import('../pkg/lipi.js').then(async (mod) => {
     await mod.default();
-    wasm = mod;
+    wasm = mod; window.wasm = mod;
     const el = document.getElementById('wasm-status');
     el.textContent = 'WASM तैयार ✓'; el.style.color = 'var(--grn)';
     lint(); renderSymbols();

@@ -12,6 +12,7 @@ mod sql;
 mod opcode;
 mod compiler;
 mod lvm;
+mod formatter;
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
@@ -123,6 +124,12 @@ pub fn lipi_completions() -> String {
         items.push(format!("{{\"label\":{},\"detail\":\"builtin\",\"kind\":\"function\"}}", json_str(b)));
     }
     format!("[{}]", items.join(","))
+}
+
+/// Format LIPI source (behavior-preserving, idempotent) — same as `lipi fmt`.
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_format(src: &str) -> String {
+    formatter::format_source(src)
 }
 
 /// Hover documentation for a word (keyword or builtin), or "" if unknown.

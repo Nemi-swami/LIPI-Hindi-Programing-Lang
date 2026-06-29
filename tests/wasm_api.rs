@@ -31,6 +31,14 @@ fn completions_and_hover() {
 }
 
 #[test]
+fn format_idempotent() {
+    let messy = "विधि  जोड़ो(अ, ब):\n  फल अ + ब\n";
+    let once = lipi::lipi_format(messy);
+    let twice = lipi::lipi_format(&once);
+    assert_eq!(once, twice, "formatter must be idempotent");
+}
+
+#[test]
 fn run_source_works() {
     assert_eq!(lipi::run_source("बताओ 2 + 3\n"), "5");
     assert_eq!(lipi::run_source("बताओ सूची_में(गिनती(3))\nविधि गिनती(n):\n    i के लिए n में:\n        उत्पन्न i\n"), "[0, 1, 2]");
