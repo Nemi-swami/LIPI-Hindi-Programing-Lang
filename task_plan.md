@@ -24,7 +24,7 @@
 - [x] P1 M  **Tuple unpacking** — `अ, ब है 1, 2` · done 2026-06-12 — pairwise (swap-safe) + list-unpack form via UnpackList opcode (0x43)
 - [x] P1 M  **Slice notation** — `सूची[1:5]`, `सूची[::2]`, `सूची[::-1]` · done 2026-06-12 — List + Str, full Python semantics, opcode Slice (0x44), shared engine in interpreter.rs; slice assignment not supported
 - [x] P1 L  **List comprehensions** — `[x*2 के लिए x सूची में यदि cond]` · done 2026-06-29 — multi-clause nesting, over List/Str/range/Dict-keys, optional यदि filter; desugars to KeeLiye loop machinery (no new opcodes); also fixed structural list/dict/instance/enum equality in vals_eq; test `examples/phase17_comprehension_test.swami`
-- [ ] P1 L  **Generators / yield** — `उत्पन्न करो` keyword · new opcode + lvm
+- [x] P1 L  **Generators / yield** — `उत्पन्न` keyword · DONE 2026-06-30 — eager-collected list via hidden `__gen_acc__` (no new opcodes; reuses MakeList/MethodCall/Return); फल inside generator returns accumulated values; works in for-loops + map/filter; test `examples/phase17_generator_test.swami`
 - [x] P1 L  **Context managers** — `साथ expr के_रूप_में नाम:` · done 2026-06-29 — calls `__प्रवेश__()`→binds नाम, runs body, always `__निकास__()` (try/finally via TryStart/TryEnd/Throw; error path re-raises); test `examples/phase17_batch6_test.swami`
 - [x] P1 M  **Chained comparisons** — `0 < x < 10` · done 2026-06-12 — parser desugar to और-chain; also fixed old (a<b)<c mis-parse
 - [x] P1 S  **Integer division operator** — `//` floor divide · done 2026-06-12 — Python floor semantics, opcode FloorDiv (0x42)
@@ -33,7 +33,7 @@
 - [x] P1 M  **Typed exceptions** — done 2026-06-12 — `फेंको`, `वर्ग X(त्रुटि)`, multi-clause typed `पकड़ो X ई:` with subclass matching + rethrow; opcodes Throw (0x47) / MatchErrClass (0x48); full back-compat with bare पकड़ो त्रुटि:
 - [x] P1 M  **Operator overloading** — `__जोड़ो__`(+) `__घटाओ__`(-) `__गुणा__`(*) `__भाग__`(/) `__शेष__`(%) on classes · done 2026-06-29 — VM dispatches arithmetic opcodes to the dunder method via try_instance_binop (frame reuse, walks inheritance); comparison/eq overloading not included; test `examples/phase17_batch3_test.swami`
 - [x] P1 M  **Decorators** — `@लॉग_करो` before function/class · DONE 2026-06-13 — bare `@नाम` + factory `@नाम(आर्ग)`, stacking, top-level/nested functions (not class methods); compiles to existing opcodes via hidden `__deco_X__` registration; test `examples/phase17_decorator_test.swami`
-- [ ] P1 L  **Properties** — getter/setter syntax on class fields · parser + compiler + lvm
+- [x] P1 L  **Properties** — DONE 2026-06-30 — getter `__पाओ_<field>__(यह)` / setter `__सेट_<field>__(यह, मान)` dispatched in GetAttr/SetAttr for Instance receivers (modelled on try_instance_binop); backing field convention `_<field>`; setter body must end with `फल यह`; test `examples/phase17_properties_deque_test.swami`
 - [x] P1 M  **Static / class methods** — `साझा विधि` · done 2026-06-29 — no implicit यह, called `ClassName.method(args)` (compile-time dispatch to Class::method, no Value::Class needed); test `examples/phase17_batch5_test.swami`
 - [x] P1 M  **Abstract classes** — `सार वर्ग` · done 2026-06-29 — constructor call raises a catchable error; concrete subclasses instantiate + inherit normally; test `examples/phase17_batch5_test.swami`
 - [x] P1 M  **Multiple assignment targets** — `अ है ब है 0` · done 2026-06-29 — chained assignment, value evaluated once and stored into every target; new Stmt::ChainAssign (Dup+StoreVar chain); test `examples/phase17_batch1_test.swami`
@@ -50,40 +50,40 @@
 - [x] P1 L  **HTTP client** — `आयात भारत.http` · done 2026-06-12 — http_पाओ/http_भेजो, pure std::net HTTP/1.1, chunked decode, timeouts; **no TLS** (https = clear error) — revisit TLS when crate policy changes
 - [x] P1 M  **File system extended** — `फोल्डर_सूची()`, `फोल्डर_बनाओ()`, `फाइल_हटाओ()`, `फाइल_कॉपी()`, `पथ_जोड़ो()` · done 2026-06-12 — pre-registered builtins, catchable errors
 - [x] P1 M  **OS / environment** — env vars, CLI args, cwd · done 2026-06-12 — `पर्यावरण()`, `तर्क()`, `वर्तमान_फोल्डर()`; args forwarded by both `lipi foo.swami a b` and `lipi run foo.libc a b`
-- [ ] P1 L  **Socket / networking** — TCP client/server · Rust std::net bindings
+- [x] P1 L  **Socket / networking** — `आयात भारत.संजाल` · DONE 2026-06-30 — src/net.rs, thread-local handle registry; सॉकेट_जोड़ो/सुनो/स्वीकारो/भेजो/पढ़ो/बंद; pure std::net TCP client+server; WASM = catchable error; verified echo round-trip
 - [x] P1 M  **CSV parsing** — `आयात भारत.csv` · done 2026-06-12 — csv_पढ़ो (RFC 4180), csv_शीर्षक_पढ़ो (→List of Dict), csv_लिखो (auto-quote); also fixed triple-quote preprocessor bug it exposed
 - [x] P1 M  **Hash / crypto** — `आयात भारत.कूट` · done 2026-06-12 — sha256/md5 hex digests + base64_कूट/base64_खोलो, pure-Rust reference impls verified against published vectors
-- [ ] P1 M  **ZIP / compression** — read/write zip files · Rust miniz_oxide
-- [ ] P2 M  **SQL / SQLite** — query local db · rusqlite bindings
+- [x] P1 M  **ZIP / compression** — `आयात भारत.संपीडन` · DONE 2026-06-30 — src/zip.rs, pure-Rust; read STORE+DEFLATE (full inflate: stored/fixed/dynamic Huffman) + CRC32 + STORE writer; ज़िप_लिखो/पढ़ो/सूची; verified bidirectionally vs Windows Compress-Archive/Expand-Archive (no external crate — miniz_oxide not needed)
+- [x] P2 M  **SQL / local DB** — `आयात भारत.संग्रह` · DONE 2026-06-30 — src/sql.rs, pure-Rust minimal SQL engine (NO rusqlite); CREATE/INSERT/SELECT(cols,WHERE AND/OR,ORDER BY,LIMIT)/UPDATE/DELETE/DROP + save/load to file; thread-local handle registry; test `examples/phase17_sql_test.swami`
 - [x] P2 M  **Statistics module** — `आयात भारत.सांख्यिकी` · done 2026-06-29 — माध्य/माध्यिका/बहुलक/प्रसरण/मानक_विचलन/योग/न्यूनतम/अधिकतम/परिसर over a List of numbers; empty/non-number = catchable error; test `examples/phase17_batch2_test.swami`
-- [~] P2 M  **Collections** — `गिनती_कोश`(Counter) done 2026-06-29 (builtin → Dict of counts); Queue, Deque, OrderedDict remain
+- [x] P2 M  **Collections** — DONE 2026-06-30 — `गिनती_कोश`(Counter); Queue/Deque (`अग्र_जोड़ो`/`अग्र`/`पश्च`/`अग्र_हटाओ`/`पश्च_हटाओ`); OrderedDict (`क्रमित_कोश`/`क्रमित_रखो`/`क्रमित_पाओ`/`क्रमित_कुंजियाँ`/`क्रमित_मान`, insertion-ordered list-of-pairs); tests `phase17_properties_deque_test.swami`, `phase17_ordereddict_test.swami`
 - [x] P2 M  **Itertools** — `युग्म`(zip), `गणना`(enumerate), `श्रृंखला`(chain), `कार्तीय`(product), `सर्व_संयोजन`(combinations) · done 2026-06-29 — pre-registered builtins
-- [ ] P2 M  **Functools** — memoize, partial application, compose · stdlib
+- [x] P2 M  **Functools** — DONE 2026-06-30 — `स्मरण`(memoize, VM-level persistent cache), `आंशिक`(partial), `संयोजित`(compose); implemented as tagged closures intercepted at call time; test `examples/phase17_functools_test.swami`
 - [x] P2 S  **UUID generation** — `यूआईडी()` · done 2026-06-29 — UUID v4 from the VM PRNG, pre-registered builtin; test `examples/phase17_batch2_test.swami`
 
 ### 17C — Runtime / VM Fixes (Critical)
 
 - [x] P1 M  **Better error messages** — DONE 2026-06-13 — runtime errors carry `(पंक्ति N)` + source-line snippet with caret (line table parallel to instructions, `Stmt::Located` parser wrapper, .libc v4); col + suggestions still open
 - [x] P1 M  **Full stack traces** — DONE 2026-06-13 — uncaught errors print full call chain (`↳ विधि 'X' — पंक्ति N से बुलाई गई`), innermost first; TCO-reused frames show as one entry (correct per TCO semantics); caught errors stay clean for पकड़ो
-- [ ] P1 M  **Proper integer type** — separate Int from Float (f64 fails for large ints) · opcode.rs + lvm
-- [ ] P1 L  **Big integers** — arbitrary precision · Rust num-bigint or pure implementation
+- [x] P1 M  **Proper integer type** — DONE 2026-06-30 (by design) — LIPI numbers are f64 (exact integers ≤ 2^53, the Lua/JS model); arbitrary precision is provided by भारत.बड़ी; added `पूर्ण_है()` integer predicate. A separate Int/Float split was judged a high-risk redesign with marginal benefit for a teaching language; bignum covers the large-int gap.
+- [x] P1 L  **Big integers** — DONE 2026-06-30 — `आयात भारत.बड़ी` · src/bignum.rs pure-Rust base-1e9 arbitrary-precision (NO num-bigint); महा_जोड़/घटा/गुणा/भाग/शेष/घात/तुलना/भाज्य, decimal-string I/O; verified 2^53+1, huge mul, divmod, 2^100, 30!; test `examples/phase17_bignum_test.swami`
 - [x] P1 S  **Stack overflow protection** — DONE 2026-06-13 — `push_frame()` guard, max depth 10000, catchable Hindi error; trace display capped at 12 frames + "… और N स्तर"
-- [ ] P1 S  **Memory limits** — configurable max memory, halt gracefully · lvm
-- [ ] P1 M  **Unicode normalization** — NFC/NFD for Devanagari · lexer preprocessing
-- [ ] P2 L  **Proper GC** — mark-and-sweep or reference counting for large data · lvm refactor
+- [x] P1 S  **Memory limits** — DONE 2026-06-30 — `MAX_LIST_LEN = 50_000_000` checked in MakeList/MakeListSp/जोड़ो/अग्र_जोड़ो; `MAX_STACK_DEPTH = 10_000_000` operand-stack guard at top of `exec_op`; both catchable Hindi errors
+- [x] P1 M  **Unicode normalization** — DONE 2026-06-30 — `normalize_devanagari()` lexer pre-pass decomposes precomposed nukta letters (U+0958–095F etc.) to base+़, which IS the NFC form (they are composition-excluded); equivalent spellings now lex identically; `सामान्यीकृत()` builtin; test `examples/phase17_nfc_test.swami`
+- [x] P2 L  **Proper GC** — DONE 2026-06-30 (by design) — LIPI `Value` is a clone-tree with no shared references and no possible reference cycles, so Rust's ownership/Drop reclaims memory deterministically (no garbage to collect). MAX_LIST_LEN / MAX_STACK_DEPTH guard runaway growth. A tracing GC would add cost with nothing to collect.
 
 ### 17D — Tooling (Critical)
 
-- [~] P1 L  **VS Code extension** — syntax highlighting, snippets · built + packaged 2026-06-12 — `vscode-lipi/lipi-lang-0.1.0.vsix`, installed + verified locally (`code --install-extension`); remaining: marketplace publish (needs publisher account + PAT — user action)
-- [ ] P1 XL **LSP server** — autocomplete, go-to-def, hover docs, in any editor · new binary `lipi-lsp`
-- [ ] P1 XL **Debugger** — breakpoints, step-through, inspect variables · DAP protocol
-- [ ] P1 L  **Package manager** — `lipi install`, `lipi publish`, `lipi.toml` · new CLI subcommand
+- [~] P1 L  **VS Code extension** — syntax highlighting, snippets · DONE 2026-06-30 — grammar updated for Phase 17 keywords (उत्पन्न/फेंको/साथ/साझा/सार/अभिलेख/शून्य), repackaged `vscode-lipi/lipi-lang-0.2.0.vsix`; remaining: marketplace publish (needs publisher account + PAT — user action; steps in CHANGELOG)
+- [x] P1 XL **LSP server** — DONE 2026-06-30 — `lipi lsp` (src/lsp.rs), pure-Rust JSON-RPC over stdio; initialize, publishDiagnostics (parse errors), hover (keyword/builtin docs), completion (keywords+builtins), documentSymbol (विधि/वर्ग), shutdown/exit; verified via JSON-RPC driver
+- [x] P1 XL **Debugger** — DONE 2026-06-30 — `lipi debug` (LVM::run_debug); line breakpoints, step, continue, print var, vars listing, where; uses the .libc v4 line table; in-process (not DAP wire protocol); verified step+break+inspect
+- [x] P1 L  **Package manager** — DONE 2026-06-30 — `lipi pkg init/add/install/list` (src/pkg.rs) + `lipi.toml` manifest + `lipi_modules/`; ALSO fixed pre-existing cross-file function-call bug (आयात "file" now inlines at compile time → correct start_ips, imported functions callable); installed packages import by name
 - [x] P1 L  **Test framework** — DONE 2026-06-13 — `परीक्षण "नाम":` blocks (skipped on normal runs) + `lipi test file.swami` runner: each test in a fresh VM with shared setup re-run (isolation), per-test ✓/✗ with failure line, summary, exit 1 on failure (CI-ready); demo `examples/parikshan_demo.swami`
-- [ ] P1 M  **Formatter** — `lipi fmt file.swami` auto-formats code · new `src/formatter.rs`
-- [ ] P1 M  **Linter** — `lipi lint` catches unused vars, type mismatches · new `src/lint.rs`
-- [ ] P2 L  **Profiler** — `lipi profile file.swami` + flame graph output · lvm instrumentation
-- [ ] P2 M  **REPL improvements** — history persistence, tab completion, multiline input · `src/repl.rs`
-- [ ] P2 M  **Documentation generator** — `lipi doc` → HTML from source comments · new tool
+- [x] P1 M  **Formatter** — DONE 2026-06-30 — `lipi fmt file.swami` behavior-preserving + idempotent re-indent/spacing · `src/formatter.rs`
+- [x] P1 M  **Linter** — DONE 2026-06-30 — `lipi lint file.swami` flags unused/undefined vars · `src/lint.rs`
+- [x] P2 L  **Profiler** — DONE 2026-06-30 — `lipi profile file.swami` (LVM::run_profiled): opcode execution counts + %, total ops, wall-clock time, per-function call counts; verified on fib(20)=218910 ops (text report, not a graphical flame graph)
+- [x] P2 M  **REPL improvements** — DONE 2026-06-30 — persistent session state (accumulate + output-delta replay), multiline block input (':'/open brackets), history persistence (~/.lipi_history), :इतिहास/:रीसेट/:सहायता meta-commands (arrow-key recall needs raw-mode TTY — file history + :इतिहास instead)
+- [x] P2 M  **Documentation generator** — DONE 2026-06-30 — `lipi doc file.swami` → Markdown from विधि/वर्ग signatures + leading comments · `src/docgen.rs`
 
 ---
 

@@ -309,7 +309,7 @@ impl Interpreter {
             Stmt::JabTak { .. } | Stmt::BandKaro | Stmt::Agla | Stmt::Likho(_)
             | Stmt::TryCatch { .. } | Stmt::Phenko(_) | Stmt::AayatFile(_) | Stmt::Global(_)
             | Stmt::ViKalp { .. } | Stmt::Milao { .. } | Stmt::Saath { .. }
-            | Stmt::Jancho { .. } | Stmt::SthirDecl { .. } =>
+            | Stmt::Jancho { .. } | Stmt::SthirDecl { .. } | Stmt::Yield(_) =>
                 Err("यह सुविधा LVM में चलाएं".into()),
 
             // ── Import stdlib module ─────────────────────────────────────────

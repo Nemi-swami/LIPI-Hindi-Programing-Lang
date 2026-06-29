@@ -77,6 +77,10 @@ pub struct LVM {
     karaka_env: KarakaEnv,
     /// Names declared स्थिर — any StoreVar to these raises an error
     constants: std::collections::HashSet<String>,
+    /// Persistent caches for स्मरण (memoize) closures, keyed by memo id.
+    /// Lives on the VM so cache survives across calls (closure captures only the id).
+    memo_caches: HashMap<u64, HashMap<String, Value>>,
+    memo_next: u64,
     /// When `capture` is true, Print writes here instead of stdout.
     pub output: String,
     capture: bool,
@@ -95,6 +99,8 @@ impl LVM {
             thrown: None,
             karaka_env: KarakaEnv::new(),
             constants: std::collections::HashSet::new(),
+            memo_caches: HashMap::new(),
+            memo_next: 0,
             output: String::new(),
             capture: false,
         };
@@ -117,6 +123,12 @@ impl LVM {
         vm.native_fns.insert("पश्च".into(), builtin_pashcha);
         vm.native_fns.insert("अग्र_हटाओ".into(), builtin_agra_hatao);
         vm.native_fns.insert("पश्च_हटाओ".into(), builtin_pashcha_hatao);
+        // OrderedDict (Phase 17) — insertion-ordered map as list-of-pairs
+        vm.native_fns.insert("क्रमित_कोश".into(), builtin_kramit_kosh);
+        vm.native_fns.insert("क्रमित_रखो".into(), builtin_kramit_rakho);
+        vm.native_fns.insert("क्रमित_पाओ".into(), builtin_kramit_pao);
+        vm.native_fns.insert("क्रमित_कुंजियाँ".into(), builtin_kramit_kunjiyan);
+        vm.native_fns.insert("क्रमित_मान".into(), builtin_kramit_maan);
         vm.native_fns.insert("निर्गम".into(), builtin_nirgam);
         // Math
         vm.native_fns.insert("निरपेक्ष".into(), builtin_nirapeksh);
@@ -136,6 +148,11 @@ impl LVM {
         vm.native_fns.insert("पर्यावरण".into(), builtin_paryavaran);
         vm.native_fns.insert("वर्तमान_फोल्डर".into(), builtin_vartamaan_folder);
         vm.native_fns.insert("तर्क".into(), builtin_tark);
+        // Unicode NFC normalization for Devanagari (Phase 17)
+        vm.native_fns.insert("सामान्यीकृत".into(), builtin_samanyikrit);
+        // Integer predicate (Phase 17) — LIPI numbers are f64; पूर्ण_है tests
+        // whether a value is a whole number (exact for |n| <= 2^53)
+        vm.native_fns.insert("पूर्ण_है".into(), builtin_purna_hai);
         // Type inspection
         vm.native_fns.insert("प्रकार".into(), builtin_prakar);
         // String formatting
@@ -285,6 +302,184 @@ impl LVM {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Like `run`, but instruments execution: counts opcode executions and
+    /// function calls, times the run, and prints a profile report to stderr
+    /// (Phase 17D — `lipi profile`). Behaviour is otherwise identical to `run`.
+    pub fn run_profiled(&mut self, program: &CompiledProgram) -> Result<(), String> {
+        self.functions = program.functions.clone();
+        self.class_parents = program.class_parents.clone();
+        let instructions = program.instructions.clone();
+        let mut ip = 0usize;
+
+        let mut op_counts: HashMap<String, u64> = HashMap::new();
+        let mut fn_calls: HashMap<String, u64> = HashMap::new();
+        let mut total_ops: u64 = 0;
+        let start = std::time::Instant::now();
+
+        'vm: while ip < instructions.len() {
+            let op = &instructions[ip];
+            ip += 1;
+
+            total_ops += 1;
+            let name = format!("{op:?}");
+            let short = name.split(['(', ' ']).next().unwrap_or("?").to_string();
+            *op_counts.entry(short).or_insert(0) += 1;
+            match op {
+                Opcode::Call(n, _) | Opcode::TailCall(n, _) => { *fn_calls.entry(n.clone()).or_insert(0) += 1; }
+                Opcode::CallKw(n, _, _) => { *fn_calls.entry(n.clone()).or_insert(0) += 1; }
+                _ => {}
+            }
+
+            match self.exec_op(op, &mut ip, &instructions) {
+                Ok(true)  => break 'vm,
+                Ok(false) => {}
+                Err(e) => {
+                    if let Some(tf) = self.try_stack.pop() {
+                        self.stack.truncate(tf.stack_depth);
+                        self.call_frames.truncate(tf.frame_depth);
+                        let errval = self.thrown.take().unwrap_or(Value::Str(e));
+                        self.stack.push(errval);
+                        ip = tf.handler_ip;
+                    } else {
+                        self.thrown = None;
+                        return Err(self.format_uncaught(e, ip, &program.lines));
+                    }
+                }
+            }
+        }
+        let elapsed = start.elapsed();
+
+        // ── Report ──
+        eprintln!("\n──────── प्रोफ़ाइल (lipi profile) ────────");
+        eprintln!("कुल निर्देश (opcodes executed): {total_ops}");
+        eprintln!("समय (time): {:.3} ms", elapsed.as_secs_f64() * 1000.0);
+        let mut ops: Vec<(&String, &u64)> = op_counts.iter().collect();
+        ops.sort_by(|a, b| b.1.cmp(a.1));
+        eprintln!("\nशीर्ष opcodes:");
+        eprintln!("  {:<22} {:>12}  {:>6}", "opcode", "गिनती", "%");
+        for (name, count) in ops.iter().take(15) {
+            let pct = if total_ops > 0 { **count as f64 / total_ops as f64 * 100.0 } else { 0.0 };
+            eprintln!("  {:<22} {:>12}  {:>5.1}%", name, count, pct);
+        }
+        if !fn_calls.is_empty() {
+            let mut fns: Vec<(&String, &u64)> = fn_calls.iter().collect();
+            fns.sort_by(|a, b| b.1.cmp(a.1));
+            eprintln!("\nफलन कॉल (function calls):");
+            eprintln!("  {:<28} {:>10}", "function", "कॉल");
+            for (name, count) in fns.iter().take(15) {
+                eprintln!("  {:<28} {:>10}", name, count);
+            }
+        }
+        eprintln!("──────────────────────────────────────────");
+        Ok(())
+    }
+
+    /// Interactive line debugger (Phase 17D — `lipi debug`). Steps the program by
+    /// source line, honouring breakpoints, and lets the user inspect variables.
+    /// `source` is the program text (for showing the current line).
+    pub fn run_debug(&mut self, program: &CompiledProgram, source: &str) -> Result<(), String> {
+        use std::io::Write;
+        self.functions = program.functions.clone();
+        self.class_parents = program.class_parents.clone();
+        let instructions = program.instructions.clone();
+        let src_lines: Vec<&str> = source.lines().collect();
+        let mut ip = 0usize;
+
+        let mut breakpoints: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        let mut stepping = true;          // start paused at the first line
+        let mut last_line: u32 = 0;
+
+        println!("LIPI डिबगर — 'help' मदद के लिए, 'c' चलाने के लिए, 'q' बाहर\n");
+
+        'vm: while ip < instructions.len() {
+            let line = program.lines.get(ip).copied().unwrap_or(0);
+            // Decide whether to pause before executing this instruction.
+            let hit_bp = line != 0 && breakpoints.contains(&line) && line != last_line;
+            let step_pause = stepping && line != 0 && line != last_line;
+            if hit_bp || step_pause {
+                last_line = line;
+                if let Some(text) = src_lines.get(line.saturating_sub(1) as usize) {
+                    println!("\x1b[33m►\x1b[0m पंक्ति {line}: {}", text.trim_end());
+                }
+                // command loop
+                loop {
+                    print!("(डिबग) ");
+                    std::io::stdout().flush().ok();
+                    let mut cmd = String::new();
+                    if std::io::stdin().read_line(&mut cmd).unwrap_or(0) == 0 { break 'vm; }
+                    let parts: Vec<&str> = cmd.trim().split_whitespace().collect();
+                    match parts.as_slice() {
+                        [] => continue,
+                        ["s"] | ["step"] => { stepping = true; break; }
+                        ["c"] | ["cont"] | ["continue"] => { stepping = false; break; }
+                        ["b", n] | ["break", n] => {
+                            if let Ok(l) = n.parse::<u32>() { breakpoints.insert(l); println!("ब्रेकपॉइंट सेट: पंक्ति {l}"); }
+                        }
+                        ["d", n] | ["delete", n] => {
+                            if let Ok(l) = n.parse::<u32>() { breakpoints.remove(&l); println!("ब्रेकपॉइंट हटाया: पंक्ति {l}"); }
+                        }
+                        ["p", name] | ["print", name] => {
+                            let v = self.call_frames.last().and_then(|f| f.locals.get(*name))
+                                .or_else(|| self.globals.get(*name));
+                            match v { Some(val) => println!("  {name} = {val}"), None => println!("  '{name}' परिभाषित नहीं है") }
+                        }
+                        ["vars"] => {
+                            if let Some(f) = self.call_frames.last() {
+                                println!("  स्थानीय (locals):");
+                                let mut keys: Vec<&String> = f.locals.keys().filter(|k| !k.starts_with("__")).collect();
+                                keys.sort();
+                                for k in keys { println!("    {k} = {}", f.locals[k]); }
+                            }
+                            let mut gkeys: Vec<&String> = self.globals.keys()
+                                .filter(|k| !k.starts_with("__") && !is_builtin_global(k)).collect();
+                            gkeys.sort();
+                            if !gkeys.is_empty() {
+                                println!("  वैश्विक (globals):");
+                                for k in gkeys { println!("    {k} = {}", self.globals[k]); }
+                            }
+                        }
+                        ["where"] | ["bt"] => {
+                            println!("  पंक्ति {line}, कॉल गहराई {}", self.call_frames.len());
+                        }
+                        ["q"] | ["quit"] => { println!("डिबग समाप्त"); return Ok(()); }
+                        ["h"] | ["help"] => {
+                            println!("  s/step       — एक पंक्ति आगे");
+                            println!("  c/continue   — अगले ब्रेकपॉइंट तक चलाएँ");
+                            println!("  b/break N    — पंक्ति N पर ब्रेकपॉइंट");
+                            println!("  d/delete N   — ब्रेकपॉइंट हटाएँ");
+                            println!("  p/print नाम  — चर का मान दिखाएँ");
+                            println!("  vars         — सभी चर दिखाएँ");
+                            println!("  where/bt     — वर्तमान पंक्ति व गहराई");
+                            println!("  q/quit       — डिबगर बंद करें");
+                        }
+                        _ => println!("अज्ञात कमांड — 'help' देखें"),
+                    }
+                }
+            }
+
+            let op = &instructions[ip];
+            ip += 1;
+            match self.exec_op(op, &mut ip, &instructions) {
+                Ok(true)  => break 'vm,
+                Ok(false) => {}
+                Err(e) => {
+                    if let Some(tf) = self.try_stack.pop() {
+                        self.stack.truncate(tf.stack_depth);
+                        self.call_frames.truncate(tf.frame_depth);
+                        let errval = self.thrown.take().unwrap_or(Value::Str(e));
+                        self.stack.push(errval);
+                        ip = tf.handler_ip;
+                    } else {
+                        self.thrown = None;
+                        return Err(self.format_uncaught(e, ip, &program.lines));
+                    }
+                }
+            }
+        }
+        println!("\nकार्यक्रम समाप्त।");
         Ok(())
     }
 
@@ -632,13 +827,42 @@ impl LVM {
                             return Err("मोड़ो: पहला तर्क सूची होनी चाहिए".into());
                         }
                     }
+                    // Functools (Phase 17): build a tagged closure that is
+                    // intercepted at call time by `call_functools`.
+                    else if name == "संयोजित" && argc == 2 {
+                        // संयोजित(f, g) → लाम्डा(x): f(g(x))
+                        let mut cap = HashMap::new();
+                        cap.insert("__f".to_string(), args[0].clone());
+                        cap.insert("__g".to_string(), args[1].clone());
+                        self.stack.push(Value::Closure { func_name: "__functools_compose__".into(), captured: cap });
+                    }
+                    else if name == "आंशिक" && argc >= 1 {
+                        // आंशिक(f, a, b, ...) → partial application binding leading args
+                        let mut cap = HashMap::new();
+                        cap.insert("__f".to_string(), args[0].clone());
+                        cap.insert("__bound".to_string(), Value::List(args[1..].to_vec()));
+                        self.stack.push(Value::Closure { func_name: "__functools_partial__".into(), captured: cap });
+                    }
+                    else if name == "स्मरण" && argc == 1 {
+                        // स्मरण(f) → memoizing wrapper; cache lives on the VM by id
+                        let id = self.memo_next;
+                        self.memo_next += 1;
+                        self.memo_caches.insert(id, HashMap::new());
+                        let mut cap = HashMap::new();
+                        cap.insert("__f".to_string(), args[0].clone());
+                        cap.insert("__id".to_string(), Value::Number(id as f64));
+                        self.stack.push(Value::Closure { func_name: "__functools_memo__".into(), captured: cap });
+                    }
                     // Closure variable: look up `name` as a variable holding a Value::Closure
                     else {
                         let maybe_closure = self.call_frames.last()
                             .and_then(|f| f.locals.get(name).cloned())
                             .or_else(|| self.globals.get(name).cloned());
                         if let Some(Value::Closure { func_name, captured }) = maybe_closure {
-                            if let Some(func) = self.functions.get(&func_name).cloned() {
+                            if func_name.starts_with("__functools_") {
+                                let res = self.call_functools(&func_name, &captured, args, instructions)?;
+                                self.stack.push(res);
+                            } else if let Some(func) = self.functions.get(&func_name).cloned() {
                                 let mut locals = captured; // start with captured scope
                                 let provided = args.len();
                                 for (param, arg) in func.params.iter().zip(args) {
@@ -783,6 +1007,10 @@ impl LVM {
                         "भारत.http"       => crate::bharat_stdlib::http_registry(),
                         "भारत.प्रतिमान"   => crate::regex_engine::pratimaan_registry(),
                         "भारत.सांख्यिकी"  => crate::bharat_stdlib::sankhyiki_registry(),
+                        "भारत.बड़ी"       => crate::bignum::badi_registry(),
+                        "भारत.संजाल"      => crate::net::sanjaal_registry(),
+                        "भारत.संपीडन"     => crate::zip::sampidan_registry(),
+                        "भारत.संग्रह"     => crate::sql::sangraha_registry(),
                         other => return Err(format!("अज्ञात मॉड्यूल: {}", other)),
                     };
                     for (fname, func) in registry {
@@ -1214,7 +1442,19 @@ impl LVM {
 
                 // ── Phase 9: Multi-file import ─────────────────────────────
                 Opcode::ImportFile(path) => {
-                    let src = std::fs::read_to_string(path)
+                    // Resolve: literal path first, then an installed package in
+                    // lipi_modules/ (Phase 17D package manager): `आयात "नाम"` finds
+                    // lipi_modules/नाम.swami or lipi_modules/नाम/नाम.swami.
+                    let resolved = if std::path::Path::new(path).exists() {
+                        path.clone()
+                    } else {
+                        let m1 = format!("lipi_modules/{path}");
+                        let m2 = format!("lipi_modules/{path}.swami");
+                        let m3 = format!("lipi_modules/{path}/{path}.swami");
+                        [m1, m2, m3].into_iter().find(|p| std::path::Path::new(p).exists())
+                            .unwrap_or_else(|| path.clone())
+                    };
+                    let src = std::fs::read_to_string(&resolved)
                         .map_err(|e| format!("फ़ाइल नहीं खुली '{}': {}", path, e))?;
                     let tokens = crate::lexer::tokenize(&src);
                     let stmts = crate::parser::parse(tokens)
@@ -1520,6 +1760,11 @@ impl LVM {
             other => return Err(format!("'{other}' विधि नहीं है")),
         };
 
+        // Functools wrappers (Phase 17) are not real functions — dispatch specially.
+        if func_name.starts_with("__functools_") {
+            return self.call_functools(&func_name, &captured, args, instructions);
+        }
+
         let func = self.functions.get(&func_name).cloned()
             .ok_or_else(|| format!("विधि '{}' नहीं मिली", func_name))?;
 
@@ -1549,6 +1794,53 @@ impl LVM {
 
         Ok(self.stack.pop().unwrap_or(Value::Nil))
     }
+
+    /// Dispatch a functools wrapper closure (संयोजित / आंशिक / स्मरण) — Phase 17.
+    fn call_functools(&mut self, func_name: &str, captured: &HashMap<String, Value>,
+                      args: Vec<Value>, instructions: &[Opcode]) -> Result<Value, String> {
+        let f = captured.get("__f").cloned()
+            .ok_or_else(|| "functools: आंतरिक त्रुटि (कोई फलन नहीं)".to_string())?;
+        match func_name {
+            "__functools_compose__" => {
+                // f(g(args...))
+                let g = captured.get("__g").cloned().unwrap_or(Value::Nil);
+                let mid = self.call_closure_value(&g, args, instructions)?;
+                self.call_closure_value(&f, vec![mid], instructions)
+            }
+            "__functools_partial__" => {
+                // f(bound..., args...)
+                let mut full = match captured.get("__bound") {
+                    Some(Value::List(b)) => b.clone(),
+                    _ => Vec::new(),
+                };
+                full.extend(args);
+                self.call_closure_value(&f, full, instructions)
+            }
+            "__functools_memo__" => {
+                let id = match captured.get("__id") { Some(Value::Number(n)) => *n as u64, _ => 0 };
+                // Build a cache key from the argument values (structural repr)
+                let key = args.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>().join("\u{1}");
+                if let Some(cache) = self.memo_caches.get(&id) {
+                    if let Some(hit) = cache.get(&key) { return Ok(hit.clone()); }
+                }
+                let val = self.call_closure_value(&f, args, instructions)?;
+                if let Some(cache) = self.memo_caches.get_mut(&id) {
+                    cache.insert(key, val.clone());
+                }
+                Ok(val)
+            }
+            other => Err(format!("अज्ञात functools wrapper: {other}")),
+        }
+    }
+}
+
+/// Pre-loaded constant globals (पाई, अनंत, …) — hidden from the debugger `vars`
+/// listing so only user variables show.
+fn is_builtin_global(name: &str) -> bool {
+    matches!(name,
+        "पाई" | "अनंत" | "ऋण_अनंत" | "शून्य" | "अरब" | "खरब" | "नील" | "शंख" | "पद्म" |
+        "आर्यभट_पाई" | "आर्यभट_कोण" | "आर्यभट_ज्या_गणना" | "नक्षत्र_संख्या" |
+        "तिथि_संख्या" | "युग_वर्ष" | "ब्रह्मगुप्त_शून्य")
 }
 
 // ── Built-in functions (always available, no import needed) ──────────────────
@@ -1585,6 +1877,25 @@ fn builtin_padho(args: Vec<Value>) -> Result<Value, String> {
             .map_err(|e| format!("पढ़ो(): इनपुट त्रुटि — {e}"))?;
         let s = line.trim_matches(['\n', '\r', ' ', '\t', '\u{feff}']);
         Ok(Value::Str(s.to_string()))
+    }
+}
+
+/// पूर्ण_है(x) — true if x is a whole-number value (no fractional part).
+fn builtin_purna_hai(args: Vec<Value>) -> Result<Value, String> {
+    match args.first() {
+        Some(Value::Number(n)) => Ok(Value::Bool(n.fract() == 0.0 && n.is_finite())),
+        Some(_) => Ok(Value::Bool(false)),
+        None => Err("पूर्ण_है(): एक तर्क आवश्यक".to_string()),
+    }
+}
+
+/// सामान्यीकृत(text) — normalize Devanagari to NFC (decompose precomposed nukta
+/// letters to base + ़). Makes equivalent spellings compare/lex identically.
+fn builtin_samanyikrit(args: Vec<Value>) -> Result<Value, String> {
+    match args.into_iter().next() {
+        Some(Value::Str(s)) => Ok(Value::Str(crate::lexer::normalize_devanagari(&s))),
+        Some(other) => Err(format!("सामान्यीकृत(): वाक्य अपेक्षित, मिला: {}", other)),
+        None => Err("सामान्यीकृत(): एक तर्क आवश्यक".to_string()),
     }
 }
 
@@ -1910,6 +2221,90 @@ fn builtin_pashcha_hatao(args: Vec<Value>) -> Result<Value, String> {
         }
         Some(other) => Err(format!("पश्च_हटाओ(): सूची अपेक्षित, मिला: {}", other)),
         None => Err("पश्च_हटाओ(): एक तर्क आवश्यक".to_string()),
+    }
+}
+
+// ── OrderedDict (Phase 17) ───────────────────────────────────────────────────
+// Insertion-ordered map represented as a List of [key, value] pairs. Pure builtins,
+// copy-on-write (return new value). Keys compared by their Display form, matching
+// how Value::Dict stores keys. Unlike कोश, iteration order = insertion order.
+
+/// क्रमित_कोश() — new empty ordered dict (an empty pair-list).
+fn builtin_kramit_kosh(_args: Vec<Value>) -> Result<Value, String> {
+    Ok(Value::List(Vec::new()))
+}
+
+/// क्रमित_रखो(od, कुंजी, मान) — set: update in place if key exists, else append.
+fn builtin_kramit_rakho(args: Vec<Value>) -> Result<Value, String> {
+    let mut it = args.into_iter();
+    let od = it.next().ok_or_else(|| "क्रमित_रखो(): तीन तर्क आवश्यक (क्रमित_कोश, कुंजी, मान)".to_string())?;
+    let key = it.next().ok_or_else(|| "क्रमित_रखो(): कुंजी आवश्यक".to_string())?;
+    let val = it.next().ok_or_else(|| "क्रमित_रखो(): मान आवश्यक".to_string())?;
+    let key_s = format!("{key}");
+    match od {
+        Value::List(mut pairs) => {
+            for p in pairs.iter_mut() {
+                if let Value::List(kv) = p {
+                    if kv.first().map(|k| format!("{k}")) == Some(key_s.clone()) {
+                        if kv.len() >= 2 { kv[1] = val; } else { kv.push(val); }
+                        return Ok(Value::List(pairs));
+                    }
+                }
+            }
+            check_list_len(pairs.len() + 1)?;
+            pairs.push(Value::List(vec![key, val]));
+            Ok(Value::List(pairs))
+        }
+        other => Err(format!("क्रमित_रखो(): क्रमित_कोश अपेक्षित, मिला: {}", other)),
+    }
+}
+
+/// क्रमित_पाओ(od, कुंजी) — value for key, or शून्य if absent.
+fn builtin_kramit_pao(args: Vec<Value>) -> Result<Value, String> {
+    let mut it = args.into_iter();
+    let od = it.next().ok_or_else(|| "क्रमित_पाओ(): दो तर्क आवश्यक (क्रमित_कोश, कुंजी)".to_string())?;
+    let key = it.next().ok_or_else(|| "क्रमित_पाओ(): कुंजी आवश्यक".to_string())?;
+    let key_s = format!("{key}");
+    match od {
+        Value::List(pairs) => {
+            for p in &pairs {
+                if let Value::List(kv) = p {
+                    if kv.first().map(|k| format!("{k}")) == Some(key_s.clone()) {
+                        return Ok(kv.get(1).cloned().unwrap_or(Value::Nil));
+                    }
+                }
+            }
+            Ok(Value::Nil)
+        }
+        other => Err(format!("क्रमित_पाओ(): क्रमित_कोश अपेक्षित, मिला: {}", other)),
+    }
+}
+
+/// क्रमित_कुंजियाँ(od) — keys in insertion order.
+fn builtin_kramit_kunjiyan(args: Vec<Value>) -> Result<Value, String> {
+    match args.into_iter().next() {
+        Some(Value::List(pairs)) => Ok(Value::List(
+            pairs.into_iter().filter_map(|p| match p {
+                Value::List(kv) => kv.into_iter().next(),
+                _ => None,
+            }).collect()
+        )),
+        Some(other) => Err(format!("क्रमित_कुंजियाँ(): क्रमित_कोश अपेक्षित, मिला: {}", other)),
+        None => Err("क्रमित_कुंजियाँ(): एक तर्क आवश्यक".to_string()),
+    }
+}
+
+/// क्रमित_मान(od) — values in insertion order.
+fn builtin_kramit_maan(args: Vec<Value>) -> Result<Value, String> {
+    match args.into_iter().next() {
+        Some(Value::List(pairs)) => Ok(Value::List(
+            pairs.into_iter().filter_map(|p| match p {
+                Value::List(kv) => kv.into_iter().nth(1),
+                _ => None,
+            }).collect()
+        )),
+        Some(other) => Err(format!("क्रमित_मान(): क्रमित_कोश अपेक्षित, मिला: {}", other)),
+        None => Err("क्रमित_मान(): एक तर्क आवश्यक".to_string()),
     }
 }
 

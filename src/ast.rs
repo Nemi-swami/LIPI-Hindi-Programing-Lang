@@ -31,6 +31,9 @@ pub enum Stmt {
     /// फल expr
     Fal(Expr),
 
+    /// उत्पन्न expr — yield a value from a generator function (Phase 17)
+    Yield(Expr),
+
     /// bare expression (function call as statement)
     ExprStmt(Expr),
 

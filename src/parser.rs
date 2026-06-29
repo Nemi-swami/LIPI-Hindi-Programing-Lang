@@ -136,6 +136,7 @@ impl Parser {
             TokenKind::Yadi    => self.stmt_yadi(),
             TokenKind::Vidhi   => self.stmt_vidhi(),
             TokenKind::Fal     => self.stmt_fal(),
+            TokenKind::Utpann  => { self.advance(); Ok(Stmt::Yield(self.expression()?)) }
             TokenKind::Aayat   => self.stmt_aayat(),
             TokenKind::Varg    => self.stmt_varg(),
             TokenKind::Sar     => self.stmt_varg(),

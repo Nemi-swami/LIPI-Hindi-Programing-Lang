@@ -1,8 +1,32 @@
 //! LIPI AST → LVM Bytecode Compiler
 
 use std::collections::{HashMap, HashSet};
-use crate::ast::{unwrap_located, BinOp, CmpOp, Expr, Stmt};
+use crate::ast::{unwrap_located, BinOp, CmpOp, CatchClause, Expr, MilaoArm, Stmt};
 use crate::opcode::{CompiledProgram, FuncDef, LvmValue, Opcode};
+
+/// Does this function body contain a top-level `उत्पन्न` (yield)? Recurses into
+/// control-flow blocks but NOT into nested विधि/लाम्डा bodies (a nested function
+/// with its own yield is a separate generator). Used to mark generator functions.
+fn body_has_yield(body: &[Stmt]) -> bool {
+    body.iter().any(stmt_has_yield)
+}
+
+fn stmt_has_yield(stmt: &Stmt) -> bool {
+    match unwrap_located(stmt) {
+        Stmt::Yield(_) => true,
+        Stmt::Yadi { then, otherwise, .. } =>
+            body_has_yield(then) || otherwise.as_ref().is_some_and(|o| body_has_yield(o)),
+        Stmt::BarKaro { body, .. } => body_has_yield(body),
+        Stmt::KeeLiye { body, .. } => body_has_yield(body),
+        Stmt::JabTak { body, .. } => body_has_yield(body),
+        Stmt::Saath { body, .. } => body_has_yield(body),
+        Stmt::TryCatch { body, clauses } =>
+            body_has_yield(body) || clauses.iter().any(|c: &CatchClause| body_has_yield(&c.body)),
+        Stmt::Milao { arms, .. } => arms.iter().any(|a: &MilaoArm| body_has_yield(&a.body)),
+        // Vidhi / Varg method bodies are separate functions — do not descend.
+        _ => false,
+    }
+}
 
 pub struct Compiler {
     instructions: Vec<Opcode>,
@@ -22,6 +46,12 @@ pub struct Compiler {
     continue_stack: Vec<(Option<usize>, Vec<usize>)>,
     /// Nesting depth inside विधि bodies — used for tail-call detection (Phase 15)
     in_function: usize,
+    /// True while compiling the body of a generator (contains उत्पन्न) — Phase 17.
+    /// उत्पन्न appends to `__gen_acc__`; फल returns the accumulator; no TCO.
+    in_generator: bool,
+    /// Resolved paths already inlined via आयात "file" — prevents import cycles
+    /// and double-inlining (Phase 17 — compile-time file imports).
+    imported_files: HashSet<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -49,7 +79,23 @@ impl Compiler {
             break_sites: Vec::new(),
             continue_stack: Vec::new(),
             in_function: 0,
+            in_generator: false,
+            imported_files: HashSet::new(),
         }
+    }
+
+    /// Resolve an आयात "name" target: the literal path first, then an installed
+    /// package under lipi_modules/ (Phase 17D package manager).
+    fn resolve_import_path(path: &str) -> String {
+        if std::path::Path::new(path).exists() { return path.to_string(); }
+        for cand in [
+            format!("lipi_modules/{path}"),
+            format!("lipi_modules/{path}.swami"),
+            format!("lipi_modules/{path}/{path}.swami"),
+        ] {
+            if std::path::Path::new(&cand).exists() { return cand; }
+        }
+        path.to_string()
     }
 
     pub fn compile_program(stmts: &[Stmt]) -> CompiledProgram {
@@ -311,12 +357,30 @@ impl Compiler {
                     },
                 );
 
+                // Generator functions (containing उत्पन्न) collect yielded values
+                // into a hidden accumulator list and return it on fall-through /
+                // फल. The accumulator is a frame-local, so recursion is safe.
+                let is_gen = body_has_yield(body);
+                let prev_gen = self.in_generator;
+                self.in_generator = is_gen;
+                if is_gen {
+                    self.emit(Opcode::MakeList(0));
+                    self.emit(Opcode::StoreVar("__gen_acc__".to_string()));
+                }
+
                 self.in_function += 1;
                 for s in body { self.compile_stmt(s); }
                 self.in_function -= 1;
-                // Implicit Nil return for functions that fall through
-                self.emit(Opcode::Push(LvmValue::Nil));
-                self.emit(Opcode::Return);
+                if is_gen {
+                    // Fall-through end of a generator returns the accumulator
+                    self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
+                    self.emit(Opcode::Return);
+                } else {
+                    // Implicit Nil return for functions that fall through
+                    self.emit(Opcode::Push(LvmValue::Nil));
+                    self.emit(Opcode::Return);
+                }
+                self.in_generator = prev_gen;
 
                 self.patch(jmp, Opcode::Jump(self.here()));
 
@@ -344,8 +408,23 @@ impl Compiler {
                 }
             }
 
+            // उत्पन्न expr — yield: append the value to the generator accumulator
+            Stmt::Yield(expr) => {
+                self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
+                self.compile_expr(expr);
+                self.emit(Opcode::MethodCall("जोड़ो".to_string(), 1));
+                self.emit(Opcode::StoreVar("__gen_acc__".to_string()));
+            }
+
             // फल expr — explicit return; use TailCall when possible (Phase 15 TCO)
             Stmt::Fal(expr) => {
+                // Inside a generator, फल stops collection and returns the
+                // accumulated values; the फल expression is ignored (early stop).
+                if self.in_generator {
+                    self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
+                    self.emit(Opcode::Return);
+                    return;
+                }
                 // Tail-call optimization: only for calls to user-defined functions
                 // (not native functions, not class constructors, not closures).
                 if self.in_function > 0 {
@@ -499,7 +578,34 @@ impl Compiler {
 
             // आयात "file.swami"  — multi-file import
             Stmt::AayatFile(path) => {
-                self.emit(Opcode::ImportFile(path.clone()));
+                // Compile-time inlining: read + parse the imported file and compile
+                // its statements into the SAME instruction space, so imported
+                // functions get correct start_ips and are callable (fixes the old
+                // runtime-ImportFile start_ip mismatch). Cycles are de-duped.
+                let resolved = Self::resolve_import_path(path);
+                if self.imported_files.contains(&resolved) { return; }
+                self.imported_files.insert(resolved.clone());
+                match std::fs::read_to_string(&resolved) {
+                    Ok(src) => {
+                        let tokens = crate::lexer::tokenize(&src);
+                        match crate::parser::parse(tokens) {
+                            Ok(stmts) => {
+                                // mini pre-pass: register imported classes so their
+                                // constructor calls compile correctly
+                                for s in &stmts {
+                                    if let Stmt::Varg { name, parent, is_abstract, .. } = unwrap_located(s) {
+                                        self.known_classes.insert(name.clone());
+                                        if *is_abstract { self.abstract_classes.insert(name.clone()); }
+                                        if let Some(p) = parent { self.class_parents.insert(name.clone(), p.clone()); }
+                                    }
+                                }
+                                for s in &stmts { self.compile_stmt(s); }
+                            }
+                            Err(e) => eprintln!("आयात '{}' में व्याकरण त्रुटि: {}", path, e),
+                        }
+                    }
+                    Err(e) => eprintln!("आयात फ़ाइल नहीं खुली '{}': {}", path, e),
+                }
             }
 
             // वैश्विक नाम  — declare global variables (Phase 13)

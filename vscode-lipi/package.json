@@ -2,7 +2,7 @@
   "name": "lipi-lang",
   "displayName": "LIPI — लिपि",
   "description": "Syntax highlighting, snippets and editing support for the LIPI programming language (Devanagari script, Hindi/Sanskrit keywords). Covers .swami source files plus .roman and .vani input formats.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "lipi-lang",
   "license": "MIT",
   "engines": {

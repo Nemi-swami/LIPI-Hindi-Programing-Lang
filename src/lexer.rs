@@ -11,6 +11,7 @@ pub enum TokenKind {
     Hai,       // है
     Vidhi,     // विधि
     Fal,       // फल
+    Utpann,    // उत्पन्न (yield)
     Yadi,      // यदि
     Anyatha,   // अन्यथा
     SeAdhik,   // से अधिक
@@ -100,6 +101,48 @@ pub struct Token {
     pub line: usize,
 }
 
+/// Canonical decomposition for a Devanagari precomposed character, if any.
+/// These code points (nukta consonants U+0958–095F and U+0929/0931/0934) carry a
+/// canonical decomposition to `base + U+093C (nukta)` and are on the Unicode
+/// composition-exclusion list, so NFC keeps them *decomposed* — i.e. this mapping
+/// IS the NFC normal form. Returns None for all other characters.
+pub fn devanagari_decompose(c: char) -> Option<(char, char)> {
+    let base = match c {
+        '\u{0929}' => '\u{0928}', // ऩ → न
+        '\u{0931}' => '\u{0930}', // ऱ → र
+        '\u{0934}' => '\u{0933}', // ऴ → ळ
+        '\u{0958}' => '\u{0915}', // क़ → क
+        '\u{0959}' => '\u{0916}', // ख़ → ख
+        '\u{095A}' => '\u{0917}', // ग़ → ग
+        '\u{095B}' => '\u{091C}', // ज़ → ज
+        '\u{095C}' => '\u{0921}', // ड़ → ड
+        '\u{095D}' => '\u{0922}', // ढ़ → ढ
+        '\u{095E}' => '\u{092B}', // फ़ → फ
+        '\u{095F}' => '\u{092F}', // य़ → य
+        _ => return None,
+    };
+    Some((base, '\u{093C}'))
+}
+
+/// Normalize a string to NFC for the Devanagari block: decompose the precomposed
+/// nukta letters to `base + ़` (their canonical/NFC form). This makes equivalent
+/// spellings (e.g. ड़ as U+095C vs ड+़) compare and lex identically. Non-Devanagari
+/// text is returned unchanged — this is a bounded, block-specific normalizer.
+pub fn normalize_devanagari(src: &str) -> String {
+    // Fast path: nothing to do if no precomposed nukta chars are present
+    if !src.chars().any(|c| devanagari_decompose(c).is_some()) {
+        return src.to_string();
+    }
+    let mut out = String::with_capacity(src.len() + 8);
+    for c in src.chars() {
+        match devanagari_decompose(c) {
+            Some((base, nukta)) => { out.push(base); out.push(nukta); }
+            None => out.push(c),
+        }
+    }
+    out
+}
+
 /// Replace `"""..."""` triple-quoted strings with escaped single-line strings.
 /// This runs as a pre-pass before line-by-line tokenization.
 fn preprocess_triple_quotes(src: &str) -> String {
@@ -155,8 +198,11 @@ fn preprocess_triple_quotes(src: &str) -> String {
 
 /// Entry point: tokenize a full source file with INDENT/DEDENT handling.
 pub fn tokenize(src: &str) -> Vec<Token> {
-    // Editors on Windows often save UTF-8 with a BOM — ignore it
-    let preprocessed = preprocess_triple_quotes(src.trim_start_matches('\u{feff}'));
+    // Editors on Windows often save UTF-8 with a BOM — ignore it.
+    // Normalize Devanagari to NFC so precomposed nukta letters and their
+    // base+nukta equivalents lex identically (Phase 17).
+    let normalized = normalize_devanagari(src.trim_start_matches('\u{feff}'));
+    let preprocessed = preprocess_triple_quotes(&normalized);
     let src = preprocessed.as_str();
     let mut out: Vec<Token> = Vec::new();
     let mut indent_stack: Vec<usize> = vec![0];
@@ -389,6 +435,7 @@ fn match_kw(word: &str, chars: &[char], pos: &mut usize, line: usize) -> Token {
         "है"       => TokenKind::Hai,
         "विधि"     => TokenKind::Vidhi,
         "फल"       => TokenKind::Fal,
+        "उत्पन्न"   => TokenKind::Utpann,
         "यदि"      => TokenKind::Yadi,
         "अन्यथा" | "अन्य" => TokenKind::Anyatha,
         "बताओ"     => TokenKind::Batao,
