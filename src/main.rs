@@ -22,6 +22,7 @@ mod lint;
 mod docgen;
 mod pkg;
 mod lsp;
+mod flame;
 
 use std::io::{self, BufRead, Write};
 
@@ -88,6 +89,32 @@ fn run_debug(path: &str) {
             if let Err(e) = vm.run_debug(&program, &source) {
                 eprintln!("LVM त्रुटि: {e}");
                 show_error_line(&source, &e);
+            }
+        }
+        Err(e) => { eprintln!("व्याकरण त्रुटि: {e}"); show_error_line(&source, &e); }
+    }
+}
+
+fn run_flame(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => {
+            if path.ends_with(".roman") || path.ends_with(".r") { roman::roman_to_devanagari(&s) }
+            else if path.ends_with(".vani") { phonetic::vani_to_devanagari(&s) }
+            else { s }
+        }
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let tokens = lexer::tokenize(&source);
+    match parser::parse(tokens) {
+        Ok(stmts) => {
+            let program = compiler::Compiler::compile_program(&stmts);
+            let mut vm = lvm::LVM::new_capturing();
+            match vm.run_flame(&program) {
+                Ok(folded) => {
+                    print!("{}", flame::folded_to_svg(&folded));
+                    eprintln!("\n--- folded stacks ---\n{}", flame::folded_to_text(&folded));
+                }
+                Err(e) => { eprintln!("LVM त्रुटि: {e}"); show_error_line(&source, &e); }
             }
         }
         Err(e) => { eprintln!("व्याकरण त्रुटि: {e}"); show_error_line(&source, &e); }
@@ -443,6 +470,9 @@ fn main() {
 
         // lipi doc foo.swami  → emit Markdown documentation (Phase 17D)
         [_, cmd, path] if cmd == "doc" => run_doc(path),
+
+        // lipi profile --flame foo.swami → emit an SVG flame graph to stdout (Phase 18)
+        [_, cmd, flag, path] if cmd == "profile" && flag == "--flame" => run_flame(path),
 
         // lipi profile foo.swami → run with opcode/function profiling (Phase 17D)
         [_, cmd, path] if cmd == "profile" => run_profile(path),

@@ -436,6 +436,45 @@ impl LVM {
         Ok(())
     }
 
+    /// Run with flame-graph sampling: each executed instruction is attributed to
+    /// the current call-stack path (folded-stack format). Returns path → samples.
+    pub fn run_flame(&mut self, program: &CompiledProgram) -> Result<HashMap<String, u64>, String> {
+        self.functions = program.functions.clone();
+        self.class_parents = program.class_parents.clone();
+        let instructions = program.instructions.clone();
+        let mut ip = 0usize;
+        let mut folded: HashMap<String, u64> = HashMap::new();
+
+        'vm: while ip < instructions.len() {
+            let mut path = String::from("मुख्य");
+            for f in &self.call_frames {
+                path.push(';');
+                path.push_str(&f.func_name);
+            }
+            *folded.entry(path).or_insert(0) += 1;
+
+            let op = &instructions[ip];
+            ip += 1;
+            match self.exec_op(op, &mut ip, &instructions) {
+                Ok(true)  => break 'vm,
+                Ok(false) => {}
+                Err(e) => {
+                    if let Some(tf) = self.try_stack.pop() {
+                        self.stack.truncate(tf.stack_depth);
+                        self.call_frames.truncate(tf.frame_depth);
+                        let errval = self.thrown.take().unwrap_or(Value::Str(e));
+                        self.stack.push(errval);
+                        ip = tf.handler_ip;
+                    } else {
+                        self.thrown = None;
+                        return Err(self.format_uncaught(e, ip, &program.lines));
+                    }
+                }
+            }
+        }
+        Ok(folded)
+    }
+
     /// Like `run`, but instruments execution: counts opcode executions and
     /// function calls, times the run, and prints a profile report to stderr
     /// (Phase 17D — `lipi profile`). Behaviour is otherwise identical to `run`.
