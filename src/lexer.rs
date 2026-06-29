@@ -11,6 +11,7 @@ pub enum TokenKind {
     Hai,       // है
     Vidhi,     // विधि
     Fal,       // फल
+    Utpann,    // उत्पन्न (yield)
     Yadi,      // यदि
     Anyatha,   // अन्यथा
     SeAdhik,   // से अधिक
@@ -70,6 +71,11 @@ pub enum TokenKind {
     Jancho,    // जाँचो  — assert (Nyaya Pratijna verification)
     Sthir,     // स्थिर  — immutable constant (Samkhya Purusha = unchanging)
     Shuddha,   // शुद्ध  — pure function (Gita karma yoga without side effects)
+    Sajha,     // साझा  — static (shared) class method, no यह (Phase 17)
+    Sar,       // सार   — abstract class marker, सार वर्ग (Phase 17)
+    Saath,     // साथ   — context manager (with), Phase 17
+    KeRupMein, // के_रूप_में — "as" binder in a साथ block (Phase 17)
+    Abhilekh,  // अभिलेख — record / dataclass shorthand (Phase 17)
 
     // Phase 17 — test framework
     Parikshan, // परीक्षण — test block (run via `lipi test file.swami`)
@@ -78,6 +84,7 @@ pub enum TokenKind {
     SlashSlash,  // // — floor (integer) division (Phase 17)
     EqEq, NotEq, Lt, Gt, LtEq, GtEq,
     Assign,    // = — default parameter values (Phase 17)
+    ColonEq,   // := — walrus / inline assignment (Phase 17)
     LBracket, RBracket,  // [ ]
     LBrace, RBrace,      // { }
     Colon, Dot, Comma, LParen, RParen,
@@ -92,6 +99,48 @@ pub enum TokenKind {
 pub struct Token {
     pub kind: TokenKind,
     pub line: usize,
+}
+
+/// Canonical decomposition for a Devanagari precomposed character, if any.
+/// These code points (nukta consonants U+0958–095F and U+0929/0931/0934) carry a
+/// canonical decomposition to `base + U+093C (nukta)` and are on the Unicode
+/// composition-exclusion list, so NFC keeps them *decomposed* — i.e. this mapping
+/// IS the NFC normal form. Returns None for all other characters.
+pub fn devanagari_decompose(c: char) -> Option<(char, char)> {
+    let base = match c {
+        '\u{0929}' => '\u{0928}', // ऩ → न
+        '\u{0931}' => '\u{0930}', // ऱ → र
+        '\u{0934}' => '\u{0933}', // ऴ → ळ
+        '\u{0958}' => '\u{0915}', // क़ → क
+        '\u{0959}' => '\u{0916}', // ख़ → ख
+        '\u{095A}' => '\u{0917}', // ग़ → ग
+        '\u{095B}' => '\u{091C}', // ज़ → ज
+        '\u{095C}' => '\u{0921}', // ड़ → ड
+        '\u{095D}' => '\u{0922}', // ढ़ → ढ
+        '\u{095E}' => '\u{092B}', // फ़ → फ
+        '\u{095F}' => '\u{092F}', // य़ → य
+        _ => return None,
+    };
+    Some((base, '\u{093C}'))
+}
+
+/// Normalize a string to NFC for the Devanagari block: decompose the precomposed
+/// nukta letters to `base + ़` (their canonical/NFC form). This makes equivalent
+/// spellings (e.g. ड़ as U+095C vs ड+़) compare and lex identically. Non-Devanagari
+/// text is returned unchanged — this is a bounded, block-specific normalizer.
+pub fn normalize_devanagari(src: &str) -> String {
+    // Fast path: nothing to do if no precomposed nukta chars are present
+    if !src.chars().any(|c| devanagari_decompose(c).is_some()) {
+        return src.to_string();
+    }
+    let mut out = String::with_capacity(src.len() + 8);
+    for c in src.chars() {
+        match devanagari_decompose(c) {
+            Some((base, nukta)) => { out.push(base); out.push(nukta); }
+            None => out.push(c),
+        }
+    }
+    out
 }
 
 /// Replace `"""..."""` triple-quoted strings with escaped single-line strings.
@@ -149,21 +198,42 @@ fn preprocess_triple_quotes(src: &str) -> String {
 
 /// Entry point: tokenize a full source file with INDENT/DEDENT handling.
 pub fn tokenize(src: &str) -> Vec<Token> {
-    // Editors on Windows often save UTF-8 with a BOM — ignore it
-    let preprocessed = preprocess_triple_quotes(src.trim_start_matches('\u{feff}'));
+    // Editors on Windows often save UTF-8 with a BOM — ignore it.
+    // Normalize Devanagari to NFC so precomposed nukta letters and their
+    // base+nukta equivalents lex identically (Phase 17).
+    let normalized = normalize_devanagari(src.trim_start_matches('\u{feff}'));
+    let preprocessed = preprocess_triple_quotes(&normalized);
     let src = preprocessed.as_str();
     let mut out: Vec<Token> = Vec::new();
     let mut indent_stack: Vec<usize> = vec![0];
+    // Running depth of open ( [ { across lines — when > 0 we are inside a
+    // multiline collection / call, so indentation and Newline are suppressed
+    // until the brackets balance (Phase 17 multiline collections).
+    let mut bracket_depth: i32 = 0;
 
     for (line_idx, line) in src.lines().enumerate() {
         let line_num = line_idx + 1;
-        let indent = leading_indent(line);
         let content = line[leading_char_count(line)..].trim_end();
+        let trimmed = strip_comment(content).trim();
+
+        if bracket_depth > 0 {
+            // Continuation line inside open brackets — no INDENT/DEDENT, and
+            // no Newline until the brackets close.
+            if trimmed.is_empty() { continue; }
+            let line_toks = lex_line(trimmed, line_num);
+            bracket_depth += bracket_delta(&line_toks);
+            out.extend(line_toks);
+            if bracket_depth <= 0 {
+                bracket_depth = 0;
+                out.push(Token { kind: TokenKind::Newline, line: line_num });
+            }
+            continue;
+        }
 
         // Skip blank / comment-only lines
-        let trimmed = strip_comment(content).trim();
         if trimmed.is_empty() { continue; }
 
+        let indent = leading_indent(line);
         let cur = *indent_stack.last().unwrap();
         if indent > cur {
             indent_stack.push(indent);
@@ -176,8 +246,13 @@ pub fn tokenize(src: &str) -> Vec<Token> {
         }
 
         let line_toks = lex_line(trimmed, line_num);
+        bracket_depth += bracket_delta(&line_toks);
         out.extend(line_toks);
-        out.push(Token { kind: TokenKind::Newline, line: line_num });
+        if bracket_depth <= 0 {
+            bracket_depth = 0;
+            out.push(Token { kind: TokenKind::Newline, line: line_num });
+        }
+        // else: open bracket — suppress Newline, next lines are continuations
     }
 
     // Close any remaining open blocks
@@ -193,6 +268,21 @@ pub fn tokenize(src: &str) -> Vec<Token> {
 }
 
 // ===== LINE LEXER =====
+
+/// Net change in open-bracket depth contributed by a line's tokens —
+/// counts ( [ { as +1 and ) ] } as -1. Brackets inside string literals are
+/// already folded into `Str` tokens, so they don't count (Phase 17).
+fn bracket_delta(toks: &[Token]) -> i32 {
+    let mut d = 0;
+    for t in toks {
+        match t.kind {
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => d += 1,
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => d -= 1,
+            _ => {}
+        }
+    }
+    d
+}
 
 fn lex_line(src: &str, line: usize) -> Vec<Token> {
     let chars: Vec<char> = src.chars().collect();
@@ -296,7 +386,10 @@ fn lex_line(src: &str, line: usize) -> Vec<Token> {
                 else { pos += 1; TokenKind::Slash }
             }
             '%' => { pos += 1; TokenKind::Percent }
-            ':' => { pos += 1; TokenKind::Colon }
+            ':' => {
+                if pos + 1 < chars.len() && chars[pos+1] == '=' { pos += 2; TokenKind::ColonEq }
+                else { pos += 1; TokenKind::Colon }
+            }
             '.' => { pos += 1; TokenKind::Dot }
             ',' => { pos += 1; TokenKind::Comma }
             '(' => { pos += 1; TokenKind::LParen }
@@ -342,6 +435,7 @@ fn match_kw(word: &str, chars: &[char], pos: &mut usize, line: usize) -> Token {
         "है"       => TokenKind::Hai,
         "विधि"     => TokenKind::Vidhi,
         "फल"       => TokenKind::Fal,
+        "उत्पन्न"   => TokenKind::Utpann,
         "यदि"      => TokenKind::Yadi,
         "अन्यथा" | "अन्य" => TokenKind::Anyatha,
         "बताओ"     => TokenKind::Batao,
@@ -403,7 +497,17 @@ fn match_kw(word: &str, chars: &[char], pos: &mut usize, line: usize) -> Token {
         "जाँचो"   => TokenKind::Jancho,
         "स्थिर"   => TokenKind::Sthir,
         "शुद्ध"   => TokenKind::Shuddha,
+        // साझा/सार are keywords only before विधि/वर्ग — otherwise plain identifiers
+        "साझा"    => if peek_word(chars, *pos).as_deref() == Some("विधि") {
+            TokenKind::Sajha
+        } else { TokenKind::Ident("साझा".into()) },
+        "सार"     => if peek_word(chars, *pos).as_deref() == Some("वर्ग") {
+            TokenKind::Sar
+        } else { TokenKind::Ident("सार".into()) },
         "परीक्षण" => TokenKind::Parikshan,
+        "साथ"     => TokenKind::Saath,
+        "के_रूप_में" => TokenKind::KeRupMein,
+        "अभिलेख"  => TokenKind::Abhilekh,
         other => TokenKind::Ident(other.into()),
     };
     Token { kind, line }

@@ -1,8 +1,32 @@
 //! LIPI AST → LVM Bytecode Compiler
 
 use std::collections::{HashMap, HashSet};
-use crate::ast::{unwrap_located, BinOp, CmpOp, Expr, Stmt};
+use crate::ast::{unwrap_located, BinOp, CmpOp, CatchClause, Expr, MilaoArm, Stmt};
 use crate::opcode::{CompiledProgram, FuncDef, LvmValue, Opcode};
+
+/// Does this function body contain a top-level `उत्पन्न` (yield)? Recurses into
+/// control-flow blocks but NOT into nested विधि/लाम्डा bodies (a nested function
+/// with its own yield is a separate generator). Used to mark generator functions.
+fn body_has_yield(body: &[Stmt]) -> bool {
+    body.iter().any(stmt_has_yield)
+}
+
+fn stmt_has_yield(stmt: &Stmt) -> bool {
+    match unwrap_located(stmt) {
+        Stmt::Yield(_) => true,
+        Stmt::Yadi { then, otherwise, .. } =>
+            body_has_yield(then) || otherwise.as_ref().is_some_and(|o| body_has_yield(o)),
+        Stmt::BarKaro { body, .. } => body_has_yield(body),
+        Stmt::KeeLiye { body, .. } => body_has_yield(body),
+        Stmt::JabTak { body, .. } => body_has_yield(body),
+        Stmt::Saath { body, .. } => body_has_yield(body),
+        Stmt::TryCatch { body, clauses } =>
+            body_has_yield(body) || clauses.iter().any(|c: &CatchClause| body_has_yield(&c.body)),
+        Stmt::Milao { arms, .. } => arms.iter().any(|a: &MilaoArm| body_has_yield(&a.body)),
+        // Vidhi / Varg method bodies are separate functions — do not descend.
+        _ => false,
+    }
+}
 
 pub struct Compiler {
     instructions: Vec<Opcode>,
@@ -15,11 +39,19 @@ pub struct Compiler {
     indian_fns: HashMap<String, IndianOp>,
     uid: usize,
     known_classes: HashSet<String>,
+    /// Classes declared `सार वर्ग` — constructor calls error (Phase 17)
+    abstract_classes: HashSet<String>,
     class_parents: HashMap<String, String>,
     break_sites: Vec<Vec<usize>>,
     continue_stack: Vec<(Option<usize>, Vec<usize>)>,
     /// Nesting depth inside विधि bodies — used for tail-call detection (Phase 15)
     in_function: usize,
+    /// True while compiling the body of a generator (contains उत्पन्न) — Phase 17.
+    /// उत्पन्न appends to `__gen_acc__`; फल returns the accumulator; no TCO.
+    in_generator: bool,
+    /// Resolved paths already inlined via आयात "file" — prevents import cycles
+    /// and double-inlining (Phase 17 — compile-time file imports).
+    imported_files: HashSet<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -42,19 +74,37 @@ impl Compiler {
             indian_fns: HashMap::new(),
             uid: 0,
             known_classes: HashSet::new(),
+            abstract_classes: HashSet::new(),
             class_parents: HashMap::new(),
             break_sites: Vec::new(),
             continue_stack: Vec::new(),
             in_function: 0,
+            in_generator: false,
+            imported_files: HashSet::new(),
         }
+    }
+
+    /// Resolve an आयात "name" target: the literal path first, then an installed
+    /// package under lipi_modules/ (Phase 17D package manager).
+    fn resolve_import_path(path: &str) -> String {
+        if std::path::Path::new(path).exists() { return path.to_string(); }
+        for cand in [
+            format!("lipi_modules/{path}"),
+            format!("lipi_modules/{path}.swami"),
+            format!("lipi_modules/{path}/{path}.swami"),
+        ] {
+            if std::path::Path::new(&cand).exists() { return cand; }
+        }
+        path.to_string()
     }
 
     pub fn compile_program(stmts: &[Stmt]) -> CompiledProgram {
         let mut c = Compiler::new();
-        // Pre-pass: collect class names and parent relationships
+        // Pre-pass: collect class names, parents, abstract flag, static methods
         for stmt in stmts {
-            if let Stmt::Varg { name, parent, .. } = unwrap_located(stmt) {
+            if let Stmt::Varg { name, parent, is_abstract, .. } = unwrap_located(stmt) {
                 c.known_classes.insert(name.clone());
+                if *is_abstract { c.abstract_classes.insert(name.clone()); }
                 if let Some(p) = parent {
                     c.class_parents.insert(name.clone(), p.clone());
                 }
@@ -307,12 +357,30 @@ impl Compiler {
                     },
                 );
 
+                // Generator functions (containing उत्पन्न) collect yielded values
+                // into a hidden accumulator list and return it on fall-through /
+                // फल. The accumulator is a frame-local, so recursion is safe.
+                let is_gen = body_has_yield(body);
+                let prev_gen = self.in_generator;
+                self.in_generator = is_gen;
+                if is_gen {
+                    self.emit(Opcode::MakeList(0));
+                    self.emit(Opcode::StoreVar("__gen_acc__".to_string()));
+                }
+
                 self.in_function += 1;
                 for s in body { self.compile_stmt(s); }
                 self.in_function -= 1;
-                // Implicit Nil return for functions that fall through
-                self.emit(Opcode::Push(LvmValue::Nil));
-                self.emit(Opcode::Return);
+                if is_gen {
+                    // Fall-through end of a generator returns the accumulator
+                    self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
+                    self.emit(Opcode::Return);
+                } else {
+                    // Implicit Nil return for functions that fall through
+                    self.emit(Opcode::Push(LvmValue::Nil));
+                    self.emit(Opcode::Return);
+                }
+                self.in_generator = prev_gen;
 
                 self.patch(jmp, Opcode::Jump(self.here()));
 
@@ -340,8 +408,23 @@ impl Compiler {
                 }
             }
 
+            // उत्पन्न expr — yield: append the value to the generator accumulator
+            Stmt::Yield(expr) => {
+                self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
+                self.compile_expr(expr);
+                self.emit(Opcode::MethodCall("जोड़ो".to_string(), 1));
+                self.emit(Opcode::StoreVar("__gen_acc__".to_string()));
+            }
+
             // फल expr — explicit return; use TailCall when possible (Phase 15 TCO)
             Stmt::Fal(expr) => {
+                // Inside a generator, फल stops collection and returns the
+                // accumulated values; the फल expression is ignored (early stop).
+                if self.in_generator {
+                    self.emit(Opcode::LoadVar("__gen_acc__".to_string()));
+                    self.emit(Opcode::Return);
+                    return;
+                }
                 // Tail-call optimization: only for calls to user-defined functions
                 // (not native functions, not class constructors, not closures).
                 if self.in_function > 0 {
@@ -376,6 +459,52 @@ impl Compiler {
                     self.emit(Opcode::UnpackList(names.len()));
                     for n in names { self.emit(Opcode::StoreVar(n.clone())); }
                 }
+            }
+
+            // अ है ब है 0  — chained assignment (Phase 17): evaluate once,
+            // store into every target (Dup keeps the value on the stack).
+            Stmt::ChainAssign { names, value } => {
+                self.compile_expr(value);
+                for (i, n) in names.iter().enumerate() {
+                    if i + 1 < names.len() { self.emit(Opcode::Dup); }
+                    self.emit(Opcode::StoreVar(n.clone()));
+                }
+            }
+
+            // साथ expr के_रूप_में नाम: body  — context manager (Phase 17).
+            // Compiles to try/finally: __निकास__ runs on both the normal path
+            // and the error path (which then rethrows).
+            Stmt::Saath { expr, var, body } => {
+                let id = self.fresh_id();
+                let cm = format!("__cm{id}__");
+                // ctx = expr
+                self.compile_expr(expr);
+                self.emit(Opcode::StoreVar(cm.clone()));
+                // नाम = ctx.__प्रवेश__()
+                self.emit(Opcode::LoadVar(cm.clone()));
+                self.emit(Opcode::MethodCall("__प्रवेश__".to_string(), 0));
+                self.emit(Opcode::StoreVar(var.clone()));
+
+                let try_start = self.emit(Opcode::TryStart(0));
+                for s in body { self.compile_stmt(s); }
+                self.emit(Opcode::TryEnd);
+                // Normal exit: run __निकास__, discard result, skip the handler
+                self.emit(Opcode::LoadVar(cm.clone()));
+                self.emit(Opcode::MethodCall("__निकास__".to_string(), 0));
+                self.emit(Opcode::Pop);
+                let jmp = self.emit(Opcode::Jump(0));
+
+                // Error path: error value is on the stack — run __निकास__, then
+                // rethrow the original error to the enclosing कोशिश.
+                let handler = self.here();
+                self.patch(try_start, Opcode::TryStart(handler));
+                self.emit(Opcode::LoadVar(cm));
+                self.emit(Opcode::MethodCall("__निकास__".to_string(), 0));
+                self.emit(Opcode::Pop);
+                self.emit(Opcode::Throw);
+
+                let end = self.here();
+                self.patch(jmp, Opcode::Jump(end));
             }
 
             // name[idx] है val  — index assignment
@@ -449,7 +578,34 @@ impl Compiler {
 
             // आयात "file.swami"  — multi-file import
             Stmt::AayatFile(path) => {
-                self.emit(Opcode::ImportFile(path.clone()));
+                // Compile-time inlining: read + parse the imported file and compile
+                // its statements into the SAME instruction space, so imported
+                // functions get correct start_ips and are callable (fixes the old
+                // runtime-ImportFile start_ip mismatch). Cycles are de-duped.
+                let resolved = Self::resolve_import_path(path);
+                if self.imported_files.contains(&resolved) { return; }
+                self.imported_files.insert(resolved.clone());
+                match std::fs::read_to_string(&resolved) {
+                    Ok(src) => {
+                        let tokens = crate::lexer::tokenize(&src);
+                        match crate::parser::parse(tokens) {
+                            Ok(stmts) => {
+                                // mini pre-pass: register imported classes so their
+                                // constructor calls compile correctly
+                                for s in &stmts {
+                                    if let Stmt::Varg { name, parent, is_abstract, .. } = unwrap_located(s) {
+                                        self.known_classes.insert(name.clone());
+                                        if *is_abstract { self.abstract_classes.insert(name.clone()); }
+                                        if let Some(p) = parent { self.class_parents.insert(name.clone(), p.clone()); }
+                                    }
+                                }
+                                for s in &stmts { self.compile_stmt(s); }
+                            }
+                            Err(e) => eprintln!("आयात '{}' में व्याकरण त्रुटि: {}", path, e),
+                        }
+                    }
+                    Err(e) => eprintln!("आयात फ़ाइल नहीं खुली '{}': {}", path, e),
+                }
             }
 
             // वैश्विक नाम  — declare global variables (Phase 13)
@@ -477,16 +633,24 @@ impl Compiler {
             // वर्ग name[(parent)]: [methods]  — class definition
             Stmt::Varg { name: class_name, methods, .. } => {
                 for method_stmt in methods {
-                    if let Stmt::Vidhi { name: method_name, params, body, vararg, .. } = unwrap_located(method_stmt) {
+                    if let Stmt::Vidhi { name: method_name, params, body, vararg, is_static, .. } = unwrap_located(method_stmt) {
                         let jmp = self.emit(Opcode::Jump(0));
                         let start_ip = self.here();
 
-                        // Params: यह is always first (self), then user params
-                        let mut full_params = vec!["यह".to_string()];
-                        full_params.extend(params.iter().map(|p| p.name.clone()));
-                        // यह never has a default; user params may (Phase 17)
-                        let mut defaults: Vec<Option<LvmValue>> = vec![None];
-                        defaults.extend(params.iter().map(|p| p.default.as_ref().map(default_to_lvm)));
+                        // Static methods (साझा विधि) take no implicit यह; instance
+                        // methods get यह prepended as the first param.
+                        let (full_params, defaults): (Vec<String>, Vec<Option<LvmValue>>) = if *is_static {
+                            (
+                                params.iter().map(|p| p.name.clone()).collect(),
+                                params.iter().map(|p| p.default.as_ref().map(default_to_lvm)).collect(),
+                            )
+                        } else {
+                            let mut fp = vec!["यह".to_string()];
+                            fp.extend(params.iter().map(|p| p.name.clone()));
+                            let mut df: Vec<Option<LvmValue>> = vec![None];
+                            df.extend(params.iter().map(|p| p.default.as_ref().map(default_to_lvm)));
+                            (fp, df)
+                        };
 
                         self.functions.insert(
                             format!("{}::{}", class_name, method_name),
@@ -498,7 +662,7 @@ impl Compiler {
                         self.in_function -= 1;
 
                         // बनाओ (constructor) returns यह implicitly
-                        if method_name == "बनाओ" {
+                        if method_name == "बनाओ" && !*is_static {
                             self.emit(Opcode::LoadVar("यह".into()));
                         } else {
                             self.emit(Opcode::Push(LvmValue::Nil));
@@ -525,50 +689,67 @@ impl Compiler {
                 self.emit(Opcode::DefineEnum(name.clone(), variant_defs));
             }
 
-            // मिलाओ expr: arms  — pattern match (Phase 15)
+            // मिलाओ expr: arms  — pattern match (Phase 15; guards Phase 17).
+            // The subject value stays on the stack across all arm tests; every
+            // "go to next arm" jump (variant mismatch OR failed guard) leaves it
+            // in place, so the next arm can retry. A matched+guard-passed arm
+            // pops it before running the body.
             Stmt::Milao { subject, arms } => {
                 self.compile_expr(subject); // enum value on stack
 
                 let mut jump_ends: Vec<usize> = Vec::new();
-                let mut last_jf: Option<usize> = None;
+                // Jump sites that must branch to the *next* arm (patched at the
+                // top of the next iteration, or to the final no-match Pop).
+                let mut pending_next: Vec<usize> = Vec::new();
 
                 for arm in arms {
-                    // Patch previous JumpIfFalse to here
-                    if let Some(jf) = last_jf.take() {
-                        self.patch(jf, Opcode::JumpIfFalse(self.here()));
+                    let here = self.here();
+                    for jf in pending_next.drain(..) {
+                        self.patch(jf, Opcode::JumpIfFalse(here));
                     }
+                    let has_guard = arm.guard.is_some();
                     match &arm.pattern {
                         crate::ast::MilaoPattern::Wildcard => {
-                            // No variant test — just pop enum and run body
-                            self.emit(Opcode::Pop);
+                            if let Some(g) = &arm.guard {
+                                // अन्यथा यदि cond — keep enum for next arm on fail
+                                self.compile_expr(g);
+                                pending_next.push(self.emit(Opcode::JumpIfFalse(0)));
+                            }
+                            self.emit(Opcode::Pop); // discard enum
                             for s in &arm.body { self.compile_stmt(s); }
-                            let je = self.emit(Opcode::Jump(0));
-                            jump_ends.push(je);
+                            jump_ends.push(self.emit(Opcode::Jump(0)));
                         }
                         crate::ast::MilaoPattern::Variant(vname, binds) => {
-                            // Dup enum, test variant, conditional jump
                             self.emit(Opcode::Dup);
                             self.emit(Opcode::MatchVariant(vname.clone()));
-                            let jf = self.emit(Opcode::JumpIfFalse(0));
-                            last_jf = Some(jf);
+                            pending_next.push(self.emit(Opcode::JumpIfFalse(0)));
 
-                            if binds.is_empty() {
+                            if has_guard {
+                                // Keep the enum on the stack while testing the
+                                // guard: unpack binds from a duplicate copy.
+                                if !binds.is_empty() {
+                                    self.emit(Opcode::Dup);
+                                    self.emit(Opcode::EnumUnpack(binds.clone()));
+                                }
+                                self.compile_expr(arm.guard.as_ref().unwrap());
+                                pending_next.push(self.emit(Opcode::JumpIfFalse(0)));
+                                self.emit(Opcode::Pop); // guard passed — discard enum
+                            } else if binds.is_empty() {
                                 self.emit(Opcode::Pop); // discard enum copy
                             } else {
                                 self.emit(Opcode::EnumUnpack(binds.clone()));
                             }
                             for s in &arm.body { self.compile_stmt(s); }
-                            let je = self.emit(Opcode::Jump(0));
-                            jump_ends.push(je);
+                            jump_ends.push(self.emit(Opcode::Jump(0)));
                         }
                     }
                 }
 
-                // If last arm had no wildcard the JumpIfFalse still points to 0 — patch to Pop
-                if let Some(jf) = last_jf.take() {
-                    self.patch(jf, Opcode::JumpIfFalse(self.here()));
+                // No arm matched — patch pending jumps here, discard the enum.
+                let no_match = self.here();
+                for jf in pending_next.drain(..) {
+                    self.patch(jf, Opcode::JumpIfFalse(no_match));
                 }
-                // Discard enum when no arm matched (no wildcard case)
                 self.emit(Opcode::Pop);
 
                 let end = self.here();
@@ -630,6 +811,12 @@ impl Compiler {
                             self.imported_natives.insert(f.into());
                         }
                     }
+                    "भारत.सांख्यिकी" => {
+                        for f in ["माध्य", "माध्यिका", "बहुलक", "प्रसरण", "मानक_विचलन",
+                                  "योग", "न्यूनतम", "अधिकतम", "परिसर"] {
+                            self.imported_natives.insert(f.into());
+                        }
+                    }
                     _ => {}
                 }
                 self.emit(Opcode::Import(module.clone()));
@@ -638,6 +825,70 @@ impl Compiler {
     }
 
     // ── Expression compilation ────────────────────────────────────────────
+
+    /// One comprehension clause = one nested KeeLiye-style loop (temp vars
+    /// `__cp{N}_val__/_lim__/_idx__`). At the innermost level the optional
+    /// यदि filter guards the append. The accumulator list sits on the stack
+    /// beneath everything this emits; every path leaves it balanced.
+    fn compile_comp_clauses(
+        &mut self,
+        expr: &Expr,
+        clauses: &[(String, Expr)],
+        depth: usize,
+        cond: &Option<Box<Expr>>,
+    ) {
+        if depth == clauses.len() {
+            let skip = match cond {
+                Some(c) => {
+                    self.compile_expr(c);
+                    Some(self.emit(Opcode::JumpIfFalse(0)))
+                }
+                None => None,
+            };
+            self.compile_expr(expr);
+            self.emit(Opcode::MethodCall("जोड़ो".to_string(), 1));
+            if let Some(site) = skip {
+                // falls through to the caller's increment code
+                let after = self.here();
+                self.patch(site, Opcode::JumpIfFalse(after));
+            }
+            return;
+        }
+
+        let (var, iter) = &clauses[depth];
+        let id = self.fresh_id();
+        let val_var = format!("__cp{id}_val__");
+        let lim_var = format!("__cp{id}_lim__");
+        let idx_var = format!("__cp{id}_idx__");
+
+        self.compile_expr(iter);
+        self.emit(Opcode::StoreVar(val_var.clone()));
+        self.emit(Opcode::LoadVar(val_var.clone()));
+        self.emit(Opcode::GetIterLen);
+        self.emit(Opcode::StoreVar(lim_var.clone()));
+        self.emit(Opcode::Push(LvmValue::Number(0.0)));
+        self.emit(Opcode::StoreVar(idx_var.clone()));
+
+        let loop_start = self.here();
+        self.emit(Opcode::LoadVar(idx_var.clone()));
+        self.emit(Opcode::LoadVar(lim_var.clone()));
+        self.emit(Opcode::Lt);
+        let jif = self.emit(Opcode::JumpIfFalse(0));
+
+        self.emit(Opcode::IterNext(val_var, idx_var.clone()));
+        self.emit(Opcode::StoreVar(var.clone()));
+
+        self.compile_comp_clauses(expr, clauses, depth + 1, cond);
+
+        self.emit(Opcode::LoadVar(idx_var.clone()));
+        self.emit(Opcode::Push(LvmValue::Number(1.0)));
+        self.emit(Opcode::Add);
+        self.emit(Opcode::StoreVar(idx_var));
+        self.emit(Opcode::Jump(loop_start));
+
+        let end = self.here();
+        self.patch(jif, Opcode::JumpIfFalse(end));
+    }
 
     fn compile_expr(&mut self, expr: &Expr) {
         match expr {
@@ -704,7 +955,13 @@ impl Compiler {
             }
 
             Expr::Call { name, args } => {
-                if self.known_classes.contains(name) {
+                if self.abstract_classes.contains(name) {
+                    // सार वर्ग cannot be instantiated — raise a catchable error
+                    self.emit(Opcode::Push(LvmValue::Str(
+                        format!("सार वर्ग '{}' को बनाया नहीं जा सकता", name)
+                    )));
+                    self.emit(Opcode::Throw);
+                } else if self.known_classes.contains(name) {
                     // Constructor call: push empty instance, then args, then call बनाओ
                     self.emit(Opcode::MakeInstance(name.clone()));
                     for arg in args { self.compile_expr(arg); }
@@ -733,7 +990,12 @@ impl Compiler {
             // func(अ, नाम=मान) — call with keyword arguments (Phase 17)
             Expr::CallKw { name, args, kwargs } => {
                 let kwnames: Vec<String> = kwargs.iter().map(|(n, _)| n.clone()).collect();
-                if self.known_classes.contains(name) {
+                if self.abstract_classes.contains(name) {
+                    self.emit(Opcode::Push(LvmValue::Str(
+                        format!("सार वर्ग '{}' को बनाया नहीं जा सकता", name)
+                    )));
+                    self.emit(Opcode::Throw);
+                } else if self.known_classes.contains(name) {
                     // Constructor: instance is the first positional arg (यह)
                     self.emit(Opcode::MakeInstance(name.clone()));
                     for arg in args { self.compile_expr(arg); }
@@ -746,12 +1008,38 @@ impl Compiler {
                 }
             }
 
+            // नाम := expr — walrus (Phase 17): store, leave value on the stack
+            Expr::Walrus { name, value } => {
+                self.compile_expr(value);
+                self.emit(Opcode::Dup);
+                self.emit(Opcode::StoreVar(name.clone()));
+            }
+
             // item में_है container — membership test (Phase 17)
             Expr::Membership { item, container, negated } => {
                 self.compile_expr(item);
                 self.compile_expr(container);
                 self.emit(Opcode::Contains);
                 if *negated { self.emit(Opcode::Not); }
+            }
+
+            // [expr के लिए var iter में यदि cond] — comprehension (Phase 17).
+            // Desugars to the KeeLiye loop machinery; the accumulator list
+            // lives on the VM stack for the whole loop, so each append is a
+            // MethodCall("जोड़ो") on the stack top — no per-iteration clone.
+            Expr::Comprehension { expr, clauses, cond } => {
+                self.emit(Opcode::MakeList(0));
+                self.compile_comp_clauses(expr, clauses, 0, cond);
+            }
+
+            // ClassName.method(args) where ClassName is a known class → static
+            // method call (Phase 17): no instance, direct Class::method dispatch.
+            Expr::MethodCall { object, method, args }
+                if matches!(object.as_ref(), Expr::Ident(c) if self.known_classes.contains(c)) =>
+            {
+                let class = if let Expr::Ident(c) = object.as_ref() { c.clone() } else { unreachable!() };
+                for arg in args { self.compile_expr(arg); }
+                self.emit(Opcode::Call(format!("{}::{}", class, method), args.len()));
             }
 
             Expr::MethodCall { object, method, args } => {

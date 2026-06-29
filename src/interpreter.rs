@@ -186,6 +186,17 @@ impl Interpreter {
                 Ok(None)
             }
 
+            // अ है ब है 0  — chained assignment (Phase 17)
+            Stmt::ChainAssign { names, value } => {
+                let val = self.eval(value)?;
+                for name in names {
+                    if !self.env.set_existing(name, val.clone()) {
+                        self.env.set(name.clone(), val.clone());
+                    }
+                }
+                Ok(None)
+            }
+
             Stmt::Assign { name, karaka, value } => {
                 let val = self.eval(value)?;
                 // Register Karaka role before storing value
@@ -297,8 +308,8 @@ impl Interpreter {
             // Phase 7+ stubs
             Stmt::JabTak { .. } | Stmt::BandKaro | Stmt::Agla | Stmt::Likho(_)
             | Stmt::TryCatch { .. } | Stmt::Phenko(_) | Stmt::AayatFile(_) | Stmt::Global(_)
-            | Stmt::ViKalp { .. } | Stmt::Milao { .. }
-            | Stmt::Jancho { .. } | Stmt::SthirDecl { .. } =>
+            | Stmt::ViKalp { .. } | Stmt::Milao { .. } | Stmt::Saath { .. }
+            | Stmt::Jancho { .. } | Stmt::SthirDecl { .. } | Stmt::Yield(_) =>
                 Err("यह सुविधा LVM में चलाएं".into()),
 
             // ── Import stdlib module ─────────────────────────────────────────
@@ -360,6 +371,22 @@ impl Interpreter {
                 let c = self.eval(container)?;
                 let found = contains_value(&i, &c)?;
                 Ok(Value::Bool(if *negated { !found } else { found }))
+            }
+
+            // नाम := expr — walrus (Phase 17)
+            Expr::Walrus { name, value } => {
+                let val = self.eval(value)?;
+                if !self.env.set_existing(name, val.clone()) {
+                    self.env.set(name.clone(), val.clone());
+                }
+                Ok(val)
+            }
+
+            // [expr के लिए var iter में यदि cond] — comprehension (Phase 17)
+            Expr::Comprehension { expr, clauses, cond } => {
+                let mut out: Vec<Value> = Vec::new();
+                self.eval_comp(expr, clauses, 0, cond, &mut out)?;
+                Ok(Value::List(out))
             }
 
             // obj[start:end:step]  — slice (Phase 17)
@@ -440,6 +467,46 @@ impl Interpreter {
             // Phase 13 stubs
             Expr::Not(_)          => Err("यह सुविधा LVM में चलाएं".into()),
         }
+    }
+
+    /// Recursive comprehension eval — one clause per nesting level; the
+    /// trailing यदि filter guards the innermost append. Iterates List
+    /// elements, Str chars, Number ranges, and Dict keys (sorted), matching
+    /// the LVM's GetIterLen/IterNext semantics.
+    fn eval_comp(
+        &mut self,
+        expr: &Expr,
+        clauses: &[(String, Expr)],
+        depth: usize,
+        cond: &Option<Box<Expr>>,
+        out: &mut Vec<Value>,
+    ) -> Result<(), String> {
+        if depth == clauses.len() {
+            if let Some(c) = cond {
+                if !is_truthy(&self.eval(c)?) {
+                    return Ok(());
+                }
+            }
+            out.push(self.eval(expr)?);
+            return Ok(());
+        }
+        let (var, iter) = &clauses[depth];
+        let items: Vec<Value> = match self.eval(iter)? {
+            Value::List(l) => l,
+            Value::Str(s) => s.chars().map(|c| Value::Str(c.to_string())).collect(),
+            Value::Number(n) => (0..n as i64).map(|i| Value::Number(i as f64)).collect(),
+            Value::Dict(d) => {
+                let mut ks: Vec<String> = d.keys().cloned().collect();
+                ks.sort();
+                ks.into_iter().map(Value::Str).collect()
+            }
+            other => return Err(format!("के लिए: '{other}' पर iteration नहीं हो सकती")),
+        };
+        for item in items {
+            self.env.set(var.clone(), item);
+            self.eval_comp(expr, clauses, depth + 1, cond, out)?;
+        }
+        Ok(())
     }
 
     fn call_fn(&mut self, name: &str, arg_exprs: &[Expr]) -> Result<Value, String> {

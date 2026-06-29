@@ -136,8 +136,11 @@ impl Parser {
             TokenKind::Yadi    => self.stmt_yadi(),
             TokenKind::Vidhi   => self.stmt_vidhi(),
             TokenKind::Fal     => self.stmt_fal(),
+            TokenKind::Utpann  => { self.advance(); Ok(Stmt::Yield(self.expression()?)) }
             TokenKind::Aayat   => self.stmt_aayat(),
             TokenKind::Varg    => self.stmt_varg(),
+            TokenKind::Sar     => self.stmt_varg(),
+            TokenKind::Sajha   => self.stmt_static_vidhi(),
             TokenKind::JabTak  => self.stmt_jab_tak(),
             TokenKind::BandKaro => { self.advance(); Ok(Stmt::BandKaro) }
             TokenKind::Agla    => { self.advance(); Ok(Stmt::Agla) }
@@ -152,6 +155,8 @@ impl Parser {
             TokenKind::Shuddha   => self.stmt_shuddha_vidhi(),
             TokenKind::At        => self.stmt_decorated(),
             TokenKind::Parikshan => self.stmt_parikshan(),
+            TokenKind::Saath     => self.stmt_saath(),
+            TokenKind::Abhilekh  => self.stmt_abhilekh(),
             TokenKind::Number(_) if matches!(self.peek_at(1), TokenKind::BarKaro) =>
                 self.stmt_bar_karo(),
             TokenKind::Ident(_) => self.stmt_ident_lead(),
@@ -181,6 +186,19 @@ impl Parser {
         match self.peek().kind.clone() {
             TokenKind::Hai => {
                 self.advance();
+                // Chained assignment: अ है ब है 0 — `Ident है` lookahead.
+                if matches!(self.peek().kind, TokenKind::Ident(_))
+                    && matches!(self.peek_at(1), TokenKind::Hai)
+                {
+                    let mut names = vec![name];
+                    while matches!(self.peek().kind, TokenKind::Ident(_))
+                        && matches!(self.peek_at(1), TokenKind::Hai)
+                    {
+                        names.push(self.expect_ident()?);
+                        self.advance(); // consume है
+                    }
+                    return Ok(Stmt::ChainAssign { names, value: self.expression()? });
+                }
                 Ok(Stmt::Assign { name, karaka, value: self.expression()? })
             }
             TokenKind::LParen => {
@@ -308,7 +326,22 @@ impl Parser {
         self.expect_kind(TokenKind::Colon)?;
         self.skip_newlines();
         let body = self.block()?;
-        Ok(Stmt::Vidhi { name, params, body, vararg, pure: false, decorators: vec![] })
+        Ok(Stmt::Vidhi { name, params, body, vararg, pure: false, decorators: vec![], is_static: false })
+    }
+
+    /// साझा विधि name(params): body  — static (shared) class method (Phase 17).
+    /// No implicit यह; called as ClassName.method(args).
+    fn stmt_static_vidhi(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume साझा
+        self.expect_kind(TokenKind::Vidhi)?;
+        let name = self.expect_ident()?;
+        self.expect_kind(TokenKind::LParen)?;
+        let (params, vararg) = self.param_list()?;
+        self.expect_kind(TokenKind::RParen)?;
+        self.expect_kind(TokenKind::Colon)?;
+        self.skip_newlines();
+        let body = self.block()?;
+        Ok(Stmt::Vidhi { name, params, body, vararg, pure: false, decorators: vec![], is_static: true })
     }
 
     /// @सजावट / @कारखाना(आर्ग) lines, then a विधि (or शुद्ध विधि) definition.
@@ -360,6 +393,56 @@ impl Parser {
         Ok(Stmt::Parikshan { name, body })
     }
 
+    /// अभिलेख Name(field1, field2, ...)  — record / dataclass (Phase 17).
+    /// Desugars to a class with an auto-generated बनाओ that stores each field.
+    fn stmt_abhilekh(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume अभिलेख
+        let name = self.expect_ident()?;
+        self.expect_kind(TokenKind::LParen)?;
+        let mut fields = Vec::new();
+        if !self.check_kind(TokenKind::RParen) {
+            loop {
+                fields.push(self.expect_ident()?);
+                if !self.check_kind(TokenKind::Comma) { break; }
+                self.advance();
+            }
+        }
+        self.expect_kind(TokenKind::RParen)?;
+
+        let params: Vec<Param> = fields.iter()
+            .map(|f| Param { name: f.clone(), karaka: None, default: None })
+            .collect();
+        let body: Vec<Stmt> = fields.iter()
+            .map(|f| Stmt::AttrAssign {
+                obj: "यह".to_string(),
+                field: f.clone(),
+                val: Expr::Ident(f.clone()),
+            })
+            .collect();
+        let ctor = Stmt::Vidhi {
+            name: "बनाओ".to_string(),
+            params,
+            body,
+            vararg: None,
+            pure: false,
+            decorators: vec![],
+            is_static: false,
+        };
+        Ok(Stmt::Varg { name, parent: None, methods: vec![ctor], is_abstract: false })
+    }
+
+    /// साथ <expr> के_रूप_में <नाम>: <block>  — context manager (Phase 17)
+    fn stmt_saath(&mut self) -> Result<Stmt, String> {
+        self.advance(); // consume साथ
+        let expr = self.expression()?;
+        self.expect_kind(TokenKind::KeRupMein)?;
+        let var = self.expect_ident()?;
+        self.expect_kind(TokenKind::Colon)?;
+        self.skip_newlines();
+        let body = self.block()?;
+        Ok(Stmt::Saath { expr, var, body })
+    }
+
     /// फल <expr>
     fn stmt_fal(&mut self) -> Result<Stmt, String> {
         self.advance();
@@ -376,9 +459,13 @@ impl Parser {
         Ok(Stmt::JabTak { condition, body })
     }
 
-    /// वर्ग Name[(Parent)]: INDENT [विधि ...] DEDENT
+    /// [सार] वर्ग Name[(Parent)]: INDENT [विधि ...] DEDENT
     fn stmt_varg(&mut self) -> Result<Stmt, String> {
-        self.advance(); // consume वर्ग
+        let is_abstract = if self.check_kind(TokenKind::Sar) {
+            self.advance(); // consume सार
+            true
+        } else { false };
+        self.expect_kind(TokenKind::Varg)?; // consume वर्ग
         let name = self.expect_ident()?;
         let parent = if self.check_kind(TokenKind::LParen) {
             self.advance();
@@ -389,7 +476,7 @@ impl Parser {
         self.expect_kind(TokenKind::Colon)?;
         self.skip_newlines();
         let methods = self.block()?;
-        Ok(Stmt::Varg { name, parent, methods })
+        Ok(Stmt::Varg { name, parent, methods, is_abstract })
     }
 
     /// कोशिश: body + one or more पकड़ो clauses (Phase 17A typed exceptions).
@@ -476,7 +563,7 @@ impl Parser {
         self.expect_kind(TokenKind::Colon)?;
         self.skip_newlines();
         let body = self.block()?;
-        Ok(Stmt::Vidhi { name, params, body, vararg, pure: true, decorators: vec![] })
+        Ok(Stmt::Vidhi { name, params, body, vararg, pure: true, decorators: vec![], is_static: false })
     }
 
     /// विकल्प Name: INDENT variant_line* DEDENT
@@ -543,10 +630,17 @@ impl Parser {
                     };
                     crate::ast::MilaoPattern::Variant(vname, binds)
                 };
+                // Optional guard: VariantName(binds) यदि <cond>:  (Phase 17)
+                let guard = if self.check_kind(TokenKind::Yadi) {
+                    self.advance();
+                    Some(self.expression()?)
+                } else {
+                    None
+                };
                 self.expect_kind(TokenKind::Colon)?;
                 self.skip_newlines();
                 let body = self.block()?;
-                arms.push(crate::ast::MilaoArm { pattern, body });
+                arms.push(crate::ast::MilaoArm { pattern, guard, body });
                 self.skip_newlines();
             }
             if self.check_kind(TokenKind::Dedent) { self.advance(); }
@@ -822,7 +916,14 @@ impl Parser {
             TokenKind::Bool(b)   => Ok(Expr::Bool(b)),
 
             TokenKind::Ident(name) => {
-                if self.check_kind(TokenKind::LParen) {
+                if self.check_kind(TokenKind::ColonEq) {
+                    // नाम := expr — walrus (Phase 17). RHS is a full expression
+                    // (lowest precedence, Python semantics) — parenthesize for
+                    // `(न := f()) से अधिक 5`.
+                    self.advance();
+                    let value = self.expression()?;
+                    Ok(Expr::Walrus { name, value: Box::new(value) })
+                } else if self.check_kind(TokenKind::LParen) {
                     self.advance();
                     let (args, kwargs) = self.arg_list_kw()?;
                     self.expect_kind(TokenKind::RParen)?;
@@ -905,7 +1006,12 @@ impl Parser {
                         } else {
                             false
                         };
-                        elems.push((is_spread, self.expression()?));
+                        let e = self.expression()?;
+                        // [expr के लिए var iter में ...] — comprehension (Phase 17)
+                        if elems.is_empty() && !is_spread && self.check_kind(TokenKind::KeeLiye) {
+                            return self.comprehension_tail(e);
+                        }
+                        elems.push((is_spread, e));
                         if !self.check_kind(TokenKind::Comma) { break; }
                         self.advance();
                     }
@@ -937,6 +1043,27 @@ impl Parser {
 
             other => Err(format!("अपेक्षित मान नहीं मिला (line {}), मिला: {:?}", tok.line, other)),
         }
+    }
+
+    /// Rest of a list comprehension, after `[expr` with के लिए peeked:
+    /// one or more `के लिए <var> <iter> में` clauses, optional `यदि <cond>`, `]`.
+    fn comprehension_tail(&mut self, expr: Expr) -> Result<Expr, String> {
+        let mut clauses: Vec<(String, Expr)> = Vec::new();
+        while self.check_kind(TokenKind::KeeLiye) {
+            self.advance();
+            let var = self.expect_ident()?;
+            let iter = self.expression()?;
+            self.expect_kind(TokenKind::Mein)?;
+            clauses.push((var, iter));
+        }
+        let cond = if self.check_kind(TokenKind::Yadi) {
+            self.advance();
+            Some(Box::new(self.expression()?))
+        } else {
+            None
+        };
+        self.expect_kind(TokenKind::RBracket)?;
+        Ok(Expr::Comprehension { expr: Box::new(expr), clauses, cond })
     }
 
     // ===== KARAKA PARSING =====

@@ -5,6 +5,10 @@ mod parser;
 mod interpreter;
 mod bharat_stdlib;
 mod regex_engine;
+mod bignum;
+mod net;
+mod zip;
+mod sql;
 mod opcode;
 mod compiler;
 mod lvm;
@@ -13,6 +17,11 @@ mod editor;
 mod tui;
 mod roman;
 mod phonetic;
+mod formatter;
+mod lint;
+mod docgen;
+mod pkg;
+mod lsp;
 
 use std::io::{self, BufRead, Write};
 
@@ -33,6 +42,55 @@ fn run(source: &str) {
             eprintln!("व्याकरण त्रुटि: {e}");
             show_error_line(source, &e);
         }
+    }
+}
+
+/// `lipi profile foo.swami` — run with opcode/function instrumentation, then
+/// print a profile report to stderr (Phase 17D).
+fn run_profile(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => {
+            if path.ends_with(".roman") || path.ends_with(".r") { roman::roman_to_devanagari(&s) }
+            else if path.ends_with(".vani") { phonetic::vani_to_devanagari(&s) }
+            else { s }
+        }
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let tokens = lexer::tokenize(&source);
+    match parser::parse(tokens) {
+        Ok(stmts) => {
+            let program = compiler::Compiler::compile_program(&stmts);
+            let mut vm = lvm::LVM::new();
+            if let Err(e) = vm.run_profiled(&program) {
+                eprintln!("LVM त्रुटि: {e}");
+                show_error_line(&source, &e);
+            }
+        }
+        Err(e) => { eprintln!("व्याकरण त्रुटि: {e}"); show_error_line(&source, &e); }
+    }
+}
+
+/// `lipi debug foo.swami` — run the program under the interactive line debugger.
+fn run_debug(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => {
+            if path.ends_with(".roman") || path.ends_with(".r") { roman::roman_to_devanagari(&s) }
+            else if path.ends_with(".vani") { phonetic::vani_to_devanagari(&s) }
+            else { s }
+        }
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let tokens = lexer::tokenize(&source);
+    match parser::parse(tokens) {
+        Ok(stmts) => {
+            let program = compiler::Compiler::compile_program(&stmts);
+            let mut vm = lvm::LVM::new();
+            if let Err(e) = vm.run_debug(&program, &source) {
+                eprintln!("LVM त्रुटि: {e}");
+                show_error_line(&source, &e);
+            }
+        }
+        Err(e) => { eprintln!("व्याकरण त्रुटि: {e}"); show_error_line(&source, &e); }
     }
 }
 
@@ -171,29 +229,180 @@ fn run_source_file(path: &str) {
     }
 }
 
+// ── Phase 17D tooling: fmt / lint / doc ────────────────────────────────────────
+
+/// `lipi fmt foo.swami`         → print formatted source to stdout
+/// `lipi fmt --write foo.swami` → reformat the file in place
+fn run_fmt(path: &str, write: bool) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let formatted = formatter::format_source(&source);
+    if write {
+        match std::fs::write(path, &formatted) {
+            Ok(()) => println!("✓ स्वरूपित: {}", path),
+            Err(e) => { eprintln!("लिख त्रुटि '{}': {e}", path); std::process::exit(2); }
+        }
+    } else {
+        print!("{}", formatted);
+    }
+}
+
+/// `lipi lint foo.swami` → report linter warnings (exit 0)
+fn run_lint(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    lint::lint_source(&source);
+}
+
+/// `lipi doc foo.swami` → emit Markdown documentation to stdout
+fn run_doc(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let title = std::path::Path::new(path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(path);
+    print!("{}", docgen::generate(&source, title));
+}
+
 // ── REPL ──────────────────────────────────────────────────────────────────────
+
+/// Path to the persistent REPL history file (~/.lipi_history).
+fn history_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok()?;
+    Some(std::path::Path::new(&home).join(".lipi_history"))
+}
+
+/// Count of unclosed ( [ { brackets in `s`, ignoring bracket chars inside string
+/// literals. Used to keep reading continuation lines for multiline REPL input.
+fn open_bracket_depth(s: &str) -> i32 {
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut prev = '\0';
+    for c in s.chars() {
+        if in_str {
+            if c == '"' && prev != '\\' { in_str = false; }
+        } else {
+            match c {
+                '"' => in_str = true,
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => depth -= 1,
+                _ => {}
+            }
+        }
+        prev = c;
+    }
+    depth
+}
 
 fn repl() {
     println!("LIPI 3.0 — LVM Edition | भारत की पहली स्वदेशी प्रोग्रामिंग भाषा");
     println!("Paninian Grammar · LVM Bytecode · भारत stdlib");
-    println!("बाहर निकलने के लिए 'बाहर' या Ctrl+C दबाएं\n");
+    println!("बाहर निकलने के लिए 'बाहर' या Ctrl+C दबाएं · :सहायता मदद के लिए\n");
+
+    // Load persisted history
+    let mut history: Vec<String> = Vec::new();
+    if let Some(hp) = history_path() {
+        if let Ok(text) = std::fs::read_to_string(&hp) {
+            history = text.lines().map(|l| l.to_string()).collect();
+            if !history.is_empty() {
+                println!("({} पूर्व इतिहास पंक्तियाँ लोड हुईं — :इतिहास देखें)\n", history.len());
+            }
+        }
+    }
+
+    // Persistent session: all successfully-run inputs are accumulated so state
+    // (variables, functions, classes) carries across prompts. We replay the whole
+    // session in a capturing VM each turn and print only the new output delta.
+    let mut session = String::new();
+    let mut prev_output = String::new();
 
     let stdin = io::stdin();
     loop {
         print!("lipi> ");
         io::stdout().flush().unwrap();
-        let mut line = String::new();
-        match stdin.lock().read_line(&mut line) {
+        let mut buf = String::new();
+        match stdin.lock().read_line(&mut buf) {
             Ok(0) | Err(_) => break,
-            Ok(_) => {
-                let trimmed = line.trim();
-                if trimmed == "बाहर" || trimmed == "exit" || trimmed == "quit" {
-                    println!("नमस्ते!");
-                    break;
+            Ok(_) => {}
+        }
+        let mut input = buf.trim_end_matches(['\n', '\r']).to_string();
+        let trimmed = input.trim();
+
+        // REPL meta-commands
+        if trimmed == "बाहर" || trimmed == "exit" || trimmed == "quit" {
+            println!("नमस्ते!");
+            break;
+        }
+        if trimmed == ":इतिहास" || trimmed == ":history" {
+            let start = history.len().saturating_sub(20);
+            for (i, h) in history[start..].iter().enumerate() {
+                println!("  {:>3}  {}", start + i + 1, h);
+            }
+            continue;
+        }
+        if trimmed == ":सहायता" || trimmed == ":help" {
+            println!("  बाहर / exit      — REPL बंद करें");
+            println!("  :इतिहास          — पिछली पंक्तियाँ दिखाएँ");
+            println!("  :रीसेट           — सत्र अवस्था साफ़ करें");
+            println!("  बहु-पंक्ति: ':' से समाप्त पंक्ति या खुले कोष्ठक → खाली पंक्ति तक पढ़ता है");
+            continue;
+        }
+        if trimmed == ":रीसेट" || trimmed == ":reset" {
+            session.clear();
+            prev_output.clear();
+            println!("(सत्र अवस्था साफ़)");
+            continue;
+        }
+        if trimmed.is_empty() { continue; }
+
+        // Multiline continuation: keep reading while the block opener ':' was used
+        // or brackets are still open. An empty line ends the block.
+        while input.trim_end().ends_with(':') || open_bracket_depth(&input) > 0 {
+            print!("..... ");
+            io::stdout().flush().unwrap();
+            let mut cont = String::new();
+            if stdin.lock().read_line(&mut cont).unwrap_or(0) == 0 { break; }
+            let cont = cont.trim_end_matches(['\n', '\r']);
+            if cont.trim().is_empty() { break; }
+            input.push('\n');
+            input.push_str(cont);
+        }
+
+        // Compile + run the accumulated session plus this input in a capturing VM,
+        // then print only the new output. Commit to the session on success.
+        let candidate = if session.is_empty() { input.clone() } else { format!("{session}\n{input}") };
+        let tokens = lexer::tokenize(&candidate);
+        match parser::parse(tokens) {
+            Ok(stmts) => {
+                let program = compiler::Compiler::compile_program(&stmts);
+                let mut vm = lvm::LVM::new_capturing();
+                match vm.run(&program) {
+                    Ok(()) => {
+                        let full = vm.output;
+                        let delta = if full.starts_with(&prev_output) { &full[prev_output.len()..] } else { &full[..] };
+                        if !delta.is_empty() { println!("{delta}"); }
+                        prev_output = full;
+                        session = candidate;
+                        // persist history
+                        history.push(input.replace('\n', " ↵ "));
+                        if let Some(hp) = history_path() {
+                            let _ = std::fs::write(&hp, history.join("\n"));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("LVM त्रुटि: {e}");
+                    }
                 }
-                if !trimmed.is_empty() {
-                    run(trimmed);
-                }
+            }
+            Err(e) => {
+                eprintln!("व्याकरण त्रुटि: {e}");
             }
         }
     }
@@ -222,6 +431,30 @@ fn main() {
 
         // lipi test foo.swami  → run परीक्षण blocks (Phase 17 test framework)
         [_, cmd, path] if cmd == "test" => run_tests(path),
+
+        // lipi fmt --write foo.swami → reformat the file in place
+        [_, cmd, flag, path] if cmd == "fmt" && flag == "--write" => run_fmt(path, true),
+
+        // lipi fmt foo.swami  → print formatted source to stdout
+        [_, cmd, path] if cmd == "fmt" => run_fmt(path, false),
+
+        // lipi lint foo.swami → report linter warnings (Phase 17D)
+        [_, cmd, path] if cmd == "lint" => run_lint(path),
+
+        // lipi doc foo.swami  → emit Markdown documentation (Phase 17D)
+        [_, cmd, path] if cmd == "doc" => run_doc(path),
+
+        // lipi profile foo.swami → run with opcode/function profiling (Phase 17D)
+        [_, cmd, path] if cmd == "profile" => run_profile(path),
+
+        // lipi pkg <sub> [args] → package manager (Phase 17D)
+        [_, cmd, rest @ ..] if cmd == "pkg" => pkg::run(rest),
+
+        // lipi lsp → Language Server Protocol over stdio (Phase 17D)
+        [_, cmd] if cmd == "lsp" => lsp::run(),
+
+        // lipi debug foo.swami → interactive line debugger (Phase 17D)
+        [_, cmd, path] if cmd == "debug" => run_debug(path),
 
         // lipi foo.libc [a b c] → execute precompiled bytecode (args → तर्क())
         [_, path, rest @ ..] if path.ends_with(".libc") => {
@@ -275,6 +508,6 @@ fn main() {
             run_source_file(path);
         }
 
-        _ => eprintln!("उपयोग: lipi [build|run|edit|roman|roman-show|phonetic|phonetic-show <फ़ाइल>] | [फ़ाइल.swami|.roman|.vani]"),
+        _ => eprintln!("उपयोग: lipi [build|run|edit|test|fmt|fmt --write|lint|doc|profile|debug|pkg|lsp|roman|roman-show|phonetic|phonetic-show <फ़ाइल>] | [फ़ाइल.swami|.roman|.vani]"),
     }
 }

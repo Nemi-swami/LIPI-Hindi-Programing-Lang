@@ -1,0 +1,30 @@
+# Phase 17 — records / dataclasses (अभिलेख)
+
+अभिलेख बिंदु(x, y)
+
+बताओ "== 1. record construct =="
+प है बिंदु(3, 4)
+जाँचो प.x बराबर 3, "record x गलत"
+जाँचो प.y बराबर 4, "record y गलत"
+
+बताओ "== 2. record print =="
+बताओ प
+
+बताओ "== 3. record equality (structural) =="
+प2 है बिंदु(3, 4)
+जाँचो प बराबर प2, "record equality गलत"
+प3 है बिंदु(5, 6)
+जाँचो प नहीं_है [प3], "record inequality गलत"
+
+बताओ "== 4. three fields =="
+अभिलेख व्यक्ति(नाम, आयु, शहर)
+व है व्यक्ति("राम", 30, "दिल्ली")
+जाँचो व.नाम बराबर "राम", "record नाम गलत"
+जाँचो व.शहर बराबर "दिल्ली", "record शहर गलत"
+
+बताओ "== 5. records in a list comprehension =="
+बिंदु_सूची है [बिंदु(i, i * i) के लिए i 4 में]
+जाँचो बिंदु_सूची.लम्बाई() बराबर 4, "record comprehension गलत"
+जाँचो बिंदु_सूची[3].y बराबर 9, "record comprehension मान गलत"
+
+बताओ "== सम्पूर्ण =="

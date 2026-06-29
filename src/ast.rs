@@ -24,10 +24,15 @@ pub enum Stmt {
     /// विधि name(params[, *vararg]): body    शुद्ध = no global side effects (Phase 16)
     /// decorators (Phase 17): `@सजावट` lines above the definition, outermost first.
     /// Each is Expr::Ident (bare @नाम) or Expr::Call/CallKw (@कारखाना(आर्ग) factory).
-    Vidhi { name: String, params: Vec<Param>, body: Vec<Stmt>, vararg: Option<String>, pure: bool, decorators: Vec<Expr> },
+    /// is_static (Phase 17): a class method declared `साझा विधि` — no implicit
+    /// यह, callable as `ClassName.method(args)`.
+    Vidhi { name: String, params: Vec<Param>, body: Vec<Stmt>, vararg: Option<String>, pure: bool, decorators: Vec<Expr>, is_static: bool },
 
     /// फल expr
     Fal(Expr),
+
+    /// उत्पन्न expr — yield a value from a generator function (Phase 17)
+    Yield(Expr),
 
     /// bare expression (function call as statement)
     ExprStmt(Expr),
@@ -38,8 +43,9 @@ pub enum Stmt {
     /// name[idx] है val  — index assignment (Phase 5)
     IndexAssign { obj: String, idx: Expr, val: Expr },
 
-    /// वर्ग name[(parent)]: [methods]  — class definition (Phase 6/9)
-    Varg { name: String, parent: Option<String>, methods: Vec<Stmt> },
+    /// वर्ग name[(parent)]: [methods]  — class definition (Phase 6/9).
+    /// is_abstract (Phase 17): `सार वर्ग` — cannot be instantiated directly.
+    Varg { name: String, parent: Option<String>, methods: Vec<Stmt>, is_abstract: bool },
 
     /// obj.field है val  — attribute assignment (Phase 6)
     AttrAssign { obj: String, field: String, val: Expr },
@@ -86,6 +92,16 @@ pub enum Stmt {
     /// values.len() == 1 → RHS must evaluate to a List of exactly names.len() elements.
     MultiAssign { names: Vec<String>, values: Vec<Expr> },
 
+    /// अ है ब है 0  — chained assignment (Phase 17). The single RHS is
+    /// evaluated once and stored into every target (rightmost binds last).
+    ChainAssign { names: Vec<String>, value: Expr },
+
+    /// साथ expr के_रूप_में नाम: body  — context manager (Phase 17).
+    /// Calls expr.__प्रवेश__() → binds नाम, runs body, then always calls
+    /// expr.__निकास__() (on normal completion AND on a thrown error, which is
+    /// re-raised afterwards).
+    Saath { expr: Expr, var: String, body: Vec<Stmt> },
+
     /// परीक्षण "नाम": block — test definition (Phase 17 test framework).
     /// Skipped entirely on normal runs; executed by `lipi test file.swami`.
     Parikshan { name: String, body: Vec<Stmt> },
@@ -127,9 +143,12 @@ pub struct ViKalpVariant {
 }
 
 /// One arm inside a मिलाओ statement.
+/// `guard` (Phase 17): optional `यदि <cond>` after the pattern — the arm
+/// matches only when the pattern matches AND the guard is truthy.
 #[derive(Debug, Clone)]
 pub struct MilaoArm {
     pub pattern: MilaoPattern,
+    pub guard: Option<Expr>,
     pub body: Vec<Stmt>,
 }
 
@@ -200,6 +219,15 @@ pub enum Expr {
     /// item में_है container — membership test on List/Str/Dict (Phase 17).
     /// negated = नहीं_है
     Membership { item: Box<Expr>, container: Box<Expr>, negated: bool },
+
+    /// नाम := expr — walrus / inline assignment (Phase 17). Stores expr into
+    /// नाम and evaluates to that value, so it can be used inside conditions.
+    Walrus { name: String, value: Box<Expr> },
+
+    /// [expr के लिए var iter में (के लिए ...)* (यदि cond)?] — list
+    /// comprehension (Phase 17). Multiple clauses nest left-to-right
+    /// (leftmost is outermost); the यदि filter applies innermost.
+    Comprehension { expr: Box<Expr>, clauses: Vec<(String, Expr)>, cond: Option<Box<Expr>> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
