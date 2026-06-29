@@ -129,6 +129,7 @@ impl LVM {
         vm.native_fns.insert("वाक्य".into(), builtin_vakya);
         vm.native_fns.insert("यादृच्छिक".into(), builtin_yadrchik);
         vm.native_fns.insert("यूआईडी".into(), builtin_uuid);
+        vm.native_fns.insert("बीज_सेट".into(), builtin_beej_set);
         vm.native_fns.insert("युग्म".into(), builtin_zip);
         vm.native_fns.insert("गणना".into(), builtin_ganana);
         vm.native_fns.insert("श्रृंखला".into(), builtin_chain);
@@ -1286,6 +1287,10 @@ impl LVM {
                         "भारत.संग्रह"     => crate::sql::sangraha_registry(),
                         "भारत.मात्रक"     => crate::matrak::matrak_registry(),
                         "भारत.रेखीय"      => crate::rekhiy::rekhiy_registry(),
+                        "भारत.नियंत्रण"   => crate::niyantran::niyantran_registry(),
+                        "भारत.दिशा"       => crate::disha::disha_registry(),
+                        "भारत.सुरक्षा"    => crate::suraksha::suraksha_registry(),
+                        "भारत.अंतराल"     => crate::antaral::antaral_registry(),
                         other => return Err(format!("अज्ञात मॉड्यूल: {}", other)),
                     };
                     for (fname, func) in registry {
@@ -2433,6 +2438,17 @@ fn init_rand() {
     #[cfg(target_arch = "wasm32")]
     let seed = RAND_STATE.load(std::sync::atomic::Ordering::Relaxed).wrapping_add(0x9E3779B97F4A7C15);
     RAND_STATE.store(seed, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// बीज_सेट(n) — seed the PRNG to a fixed value for reproducible/deterministic
+/// runs (verification & validation). After this, यादृच्छिक is deterministic.
+fn builtin_beej_set(args: Vec<Value>) -> Result<Value, String> {
+    let seed = match args.first() {
+        Some(Value::Number(n)) => *n as u64,
+        _ => return Err("बीज_सेट(): संख्या अपेक्षित".to_string()),
+    };
+    RAND_STATE.store(seed.wrapping_add(1), std::sync::atomic::Ordering::Relaxed);
+    Ok(Value::Bool(true))
 }
 
 fn next_rand() -> u64 {
