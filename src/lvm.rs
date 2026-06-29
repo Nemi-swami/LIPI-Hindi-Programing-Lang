@@ -1152,6 +1152,38 @@ impl LVM {
                 }
 
                 // ── Method calls ───────────────────────────────────────────
+                Opcode::MethodCallKw { method, pos_argc, kwnames } => {
+                    let mut kwvals = Vec::with_capacity(kwnames.len());
+                    for _ in 0..kwnames.len() { kwvals.push(pop(&mut self.stack)?); }
+                    kwvals.reverse();
+                    let mut args = Vec::with_capacity(*pos_argc);
+                    for _ in 0..*pos_argc { args.push(pop(&mut self.stack)?); }
+                    args.reverse();
+                    let obj = pop(&mut self.stack)?;
+
+                    let class_name = match &obj {
+                        Value::Instance { class, .. } => class.clone(),
+                        other => return Err(format!("कीवर्ड तर्क विधि कॉल '{}' पर असमर्थित: {}", method, other)),
+                    };
+                    let func = {
+                        let mut search = Some(class_name.clone());
+                        let mut found = None;
+                        while let Some(cls) = search {
+                            let key = format!("{}::{}", cls, method);
+                            if let Some(f) = self.functions.get(&key).cloned() { found = Some(f); break; }
+                            search = self.class_parents.get(&cls).cloned();
+                        }
+                        found
+                    };
+                    let func = func.ok_or_else(|| format!("'{}' में विधि '{}' नहीं है", class_name, method))?;
+                    let mut locals = HashMap::new();
+                    let all: Vec<Value> = std::iter::once(obj).chain(args).collect();
+                    bind_args_kw(&mut locals, &func, all, kwnames, kwvals, method)?;
+                    self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: format!("{}.{}", class_name, method) })?;
+                    *ip = func.start_ip;
+                    return Ok(false);
+                }
+
                 Opcode::MethodCall(method, n_args) => {
                     let mut args = Vec::with_capacity(*n_args);
                     for _ in 0..*n_args { args.push(pop(&mut self.stack)?); }

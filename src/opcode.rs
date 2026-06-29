@@ -203,4 +203,7 @@ pub enum Opcode {
     /// iterable is exhausted. `idx_var` tracks position for indexable types
     /// (ignored for generators). Tag 0x4B. (Phase 18)
     IterStep { loop_var: String, container_var: String, idx_var: String },
+    /// obj.method(pos…, kw=…) — instance method call with keyword args. Stack:
+    /// object, positional args, then keyword values in `kwnames` order. Tag 0x4C.
+    MethodCallKw { method: String, pos_argc: usize, kwnames: Vec<String> },
 }

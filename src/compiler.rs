@@ -52,6 +52,9 @@ pub struct Compiler {
     /// Resolved paths already inlined via आयात "file" — prevents import cycles
     /// and double-inlining (Phase 17 — compile-time file imports).
     imported_files: HashSet<String>,
+    /// Namespaced imports (Phase 18): alias → set of function short names.
+    /// `नाम.func(args)` compiles to a direct Call(func).
+    module_aliases: HashMap<String, HashSet<String>>,
 }
 
 #[derive(Clone, Copy)]
@@ -81,6 +84,7 @@ impl Compiler {
             in_function: 0,
             in_generator: false,
             imported_files: HashSet::new(),
+            module_aliases: HashMap::new(),
         }
     }
 
@@ -582,6 +586,38 @@ impl Compiler {
                 }
             }
 
+            Stmt::AayatFileAs { path, alias } => {
+                let resolved = Self::resolve_import_path(path);
+                match std::fs::read_to_string(&resolved) {
+                    Ok(src) => {
+                        let tokens = crate::lexer::tokenize(&src);
+                        match crate::parser::parse(tokens) {
+                            Ok(stmts) => {
+                                let mut names = HashSet::new();
+                                for s in &stmts {
+                                    match unwrap_located(s) {
+                                        Stmt::Varg { name, parent, is_abstract, .. } => {
+                                            self.known_classes.insert(name.clone());
+                                            if *is_abstract { self.abstract_classes.insert(name.clone()); }
+                                            if let Some(p) = parent { self.class_parents.insert(name.clone(), p.clone()); }
+                                        }
+                                        Stmt::Vidhi { name, .. } => { names.insert(name.clone()); }
+                                        _ => {}
+                                    }
+                                }
+                                if !self.imported_files.contains(&resolved) {
+                                    self.imported_files.insert(resolved.clone());
+                                    for s in &stmts { self.compile_stmt(s); }
+                                }
+                                self.module_aliases.insert(alias.clone(), names);
+                            }
+                            Err(e) => eprintln!("आयात '{}' में व्याकरण त्रुटि: {}", path, e),
+                        }
+                    }
+                    Err(e) => eprintln!("आयात फ़ाइल नहीं खुली '{}': {}", path, e),
+                }
+            }
+
             // वैश्विक नाम  — declare global variables (Phase 13)
             Stmt::Global(names) => {
                 for name in names {
@@ -1010,6 +1046,15 @@ impl Compiler {
                 self.compile_comp_clauses(expr, clauses, 0, cond);
             }
 
+            // नाम.func(args) where नाम is a module alias → direct Call(func) (Phase 18)
+            Expr::MethodCall { object, method, args }
+                if matches!(object.as_ref(), Expr::Ident(a)
+                    if self.module_aliases.get(a).is_some_and(|fns| fns.contains(method))) =>
+            {
+                for arg in args { self.compile_expr(arg); }
+                self.emit(Opcode::Call(method.clone(), args.len()));
+            }
+
             // ClassName.method(args) where ClassName is a known class → static
             // method call (Phase 17): no instance, direct Class::method dispatch.
             Expr::MethodCall { object, method, args }
@@ -1024,6 +1069,14 @@ impl Compiler {
                 self.compile_expr(object);
                 for arg in args { self.compile_expr(arg); }
                 self.emit(Opcode::MethodCall(method.clone(), args.len()));
+            }
+
+            Expr::MethodCallKw { object, method, args, kwargs } => {
+                self.compile_expr(object);
+                for arg in args { self.compile_expr(arg); }
+                for (_, v) in kwargs { self.compile_expr(v); }
+                let kwnames: Vec<String> = kwargs.iter().map(|(k, _)| k.clone()).collect();
+                self.emit(Opcode::MethodCallKw { method: method.clone(), pos_argc: args.len(), kwnames });
             }
 
             // [e1, e2, ...]  — सूची literal

@@ -1,0 +1,10 @@
+# Phase 18 — Module namespaces (आयात ... के_रूप_में)
+आयात "examples/lib_ganit.swami" के_रूप_में ग
+
+बताओ "== namespaced calls =="
+बताओ ग.वर्ग_करो(6)            # 36
+जाँचो ग.वर्ग_करो(6) बराबर 36, "namespace call गलत"
+जाँचो ग.घन_करो(3) बराबर 27, "namespace घन गलत"
+
+बताओ ""
+बताओ "सब परीक्षण पास ✓"

@@ -312,7 +312,8 @@ impl Interpreter {
             Stmt::JabTak { .. } | Stmt::BandKaro | Stmt::Agla | Stmt::Likho(_)
             | Stmt::TryCatch { .. } | Stmt::Phenko(_) | Stmt::AayatFile(_) | Stmt::Global(_)
             | Stmt::ViKalp { .. } | Stmt::Milao { .. } | Stmt::Saath { .. }
-            | Stmt::Jancho { .. } | Stmt::SthirDecl { .. } | Stmt::Yield(_) =>
+            | Stmt::Jancho { .. } | Stmt::SthirDecl { .. } | Stmt::Yield(_)
+            | Stmt::AayatFileAs { .. } =>
                 Err("यह सुविधा LVM में चलाएं".into()),
 
             // ── Import stdlib module ─────────────────────────────────────────
@@ -417,6 +418,8 @@ impl Interpreter {
                 for a in args { evaled.push(self.eval(a)?); }
                 call_method(obj, method, evaled)
             }
+
+            Expr::MethodCallKw { .. } => Err("कीवर्ड तर्क विधि कॉल LVM में चलाएं".into()),
 
             // Phase 5 — tree-walk interpreter stubs (LVM is the default path)
             Expr::List(elems) => {

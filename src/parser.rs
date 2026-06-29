@@ -108,6 +108,14 @@ fn make_call(name: String, args: Vec<Expr>, kwargs: Vec<(String, Expr)>) -> Expr
     }
 }
 
+fn make_method_call(object: Expr, method: String, args: Vec<Expr>, kwargs: Vec<(String, Expr)>) -> Expr {
+    if kwargs.is_empty() {
+        Expr::MethodCall { object: Box::new(object), method, args }
+    } else {
+        Expr::MethodCallKw { object: Box::new(object), method, args, kwargs }
+    }
+}
+
 pub fn parse(tokens: Vec<Token>) -> Result<Program, String> {
     let mut p = Parser { tokens, pos: 0 };
     p.program()
@@ -265,13 +273,9 @@ impl Parser {
                     Ok(Stmt::AttrAssign { obj: name, field, val })
                 } else if self.check_kind(TokenKind::LParen) {
                     self.advance();
-                    let args = self.arg_list()?;
+                    let (args, kwargs) = self.arg_list_kw()?;
                     self.expect_kind(TokenKind::RParen)?;
-                    Ok(Stmt::ExprStmt(Expr::MethodCall {
-                        object: Box::new(Expr::Ident(name)),
-                        method: field,
-                        args,
-                    }))
+                    Ok(Stmt::ExprStmt(make_method_call(Expr::Ident(name), field, args, kwargs)))
                 } else {
                     Ok(Stmt::ExprStmt(Expr::Attr {
                         obj: Box::new(Expr::Ident(name)),
@@ -654,6 +658,11 @@ impl Parser {
         // File import: आयात "path.swami"
         if let TokenKind::Str(path) = self.peek().kind.clone() {
             self.advance();
+            if matches!(self.peek().kind, TokenKind::KeRupMein) {
+                self.advance();
+                let alias = self.expect_ident()?;
+                return Ok(Stmt::AayatFileAs { path, alias });
+            }
             return Ok(Stmt::AayatFile(path));
         }
         let prefix = self.expect_ident()?;
@@ -889,9 +898,9 @@ impl Parser {
                 let field = self.expect_field_name()?;
                 if self.check_kind(TokenKind::LParen) {
                     self.advance();
-                    let args = self.arg_list()?;
+                    let (args, kwargs) = self.arg_list_kw()?;
                     self.expect_kind(TokenKind::RParen)?;
-                    expr = Expr::MethodCall { object: Box::new(expr), method: field, args };
+                    expr = make_method_call(expr, field, args, kwargs);
                 } else {
                     expr = Expr::Attr { obj: Box::new(expr), field };
                 }
@@ -933,13 +942,9 @@ impl Parser {
                     let field = self.expect_field_name()?;
                     if self.check_kind(TokenKind::LParen) {
                         self.advance();
-                        let args = self.arg_list()?;
+                        let (args, kwargs) = self.arg_list_kw()?;
                         self.expect_kind(TokenKind::RParen)?;
-                        Ok(Expr::MethodCall {
-                            object: Box::new(Expr::Ident(name)),
-                            method: field,
-                            args,
-                        })
+                        Ok(make_method_call(Expr::Ident(name), field, args, kwargs))
                     } else {
                         Ok(Expr::Attr { obj: Box::new(Expr::Ident(name)), field })
                     }
@@ -1172,17 +1177,6 @@ impl Parser {
             end: end.map(Box::new),
             step: step.map(Box::new),
         })
-    }
-
-    fn arg_list(&mut self) -> Result<Vec<Expr>, String> {
-        let line = self.peek().line;
-        let (args, kwargs) = self.arg_list_kw()?;
-        if !kwargs.is_empty() {
-            return Err(format!(
-                "कीवर्ड तर्क (नाम=मान) यहाँ समर्थित नहीं — केवल विधि-नाम कॉल में (line {})", line
-            ));
-        }
-        Ok(args)
     }
 
     /// Returns (positional_args, keyword_args) — Phase 17 keyword arguments.

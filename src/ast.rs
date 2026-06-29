@@ -72,6 +72,9 @@ pub enum Stmt {
     /// आयात "file.swami"  — import another .swami file (Phase 9)
     AayatFile(String),
 
+    /// आयात "file.swami" के_रूप_में नाम  — namespaced import (Phase 18)
+    AayatFileAs { path: String, alias: String },
+
     /// वैश्विक नाम1, नाम2  — declare names as global in a function (Phase 13)
     Global(Vec<String>),
 
@@ -182,6 +185,8 @@ pub enum Expr {
     /// func(अ, नाम=मान)  — call with keyword arguments (Phase 17)
     CallKw { name: String, args: Vec<Expr>, kwargs: Vec<(String, Expr)> },
     MethodCall { object: Box<Expr>, method: String, args: Vec<Expr> },
+    /// obj.method(अ, नाम=मान) — method call with keyword arguments (Phase 18)
+    MethodCallKw { object: Box<Expr>, method: String, args: Vec<Expr>, kwargs: Vec<(String, Expr)> },
     /// [e1, e2, ...]  — सूची literal (Phase 5)
     List(Vec<Expr>),
     /// [*सूची1, 99, *सूची2] — list literal with spread elements (Phase 17).
