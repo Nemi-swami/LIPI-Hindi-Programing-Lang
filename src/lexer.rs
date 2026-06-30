@@ -86,6 +86,7 @@ pub enum TokenKind {
     EqEq, NotEq, Lt, Gt, LtEq, GtEq,
     Assign,    // = — default parameter values (Phase 17)
     ColonEq,   // := — walrus / inline assignment (Phase 17)
+    Arrow,     // -> — return type annotation (Phase 18 #7)
     LBracket, RBracket,  // [ ]
     LBrace, RBrace,      // { }
     Colon, Dot, Comma, LParen, RParen,
@@ -380,7 +381,10 @@ fn lex_line(src: &str, line: usize) -> Vec<Token> {
 
         let kind = match c {
             '+' => { pos += 1; TokenKind::Plus }
-            '-' => { pos += 1; TokenKind::Minus }
+            '-' => {
+                if pos + 1 < chars.len() && chars[pos+1] == '>' { pos += 2; TokenKind::Arrow }
+                else { pos += 1; TokenKind::Minus }
+            }
             '*' => { pos += 1; TokenKind::Star }
             '/' => {
                 if pos + 1 < chars.len() && chars[pos+1] == '/' { pos += 2; TokenKind::SlashSlash }

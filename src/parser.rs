@@ -191,6 +191,9 @@ impl Parser {
         // Syntax: नाम कर्ता है "राम"
         let karaka = self.parse_optional_karaka();
 
+        // Phase 18 #7: optional `: प्रकार` type annotation — `क: संख्या है 5`
+        let type_hint = self.parse_optional_type()?;
+
         match self.peek().kind.clone() {
             TokenKind::Hai => {
                 self.advance();
@@ -207,7 +210,7 @@ impl Parser {
                     }
                     return Ok(Stmt::ChainAssign { names, value: self.expression()? });
                 }
-                Ok(Stmt::Assign { name, karaka, value: self.expression()? })
+                Ok(Stmt::Assign { name, karaka, type_hint, value: self.expression()? })
             }
             TokenKind::LParen => {
                 self.advance();
@@ -327,10 +330,11 @@ impl Parser {
         self.expect_kind(TokenKind::LParen)?;
         let (params, vararg) = self.param_list()?;
         self.expect_kind(TokenKind::RParen)?;
+        let ret_type = self.parse_optional_return_type()?;
         self.expect_kind(TokenKind::Colon)?;
         self.skip_newlines();
         let body = self.block()?;
-        Ok(Stmt::Vidhi { name, params, body, vararg, pure: false, decorators: vec![], is_static: false })
+        Ok(Stmt::Vidhi { name, params, body, vararg, pure: false, decorators: vec![], is_static: false, ret_type })
     }
 
     /// साझा विधि name(params): body  — static (shared) class method (Phase 17).
@@ -342,10 +346,11 @@ impl Parser {
         self.expect_kind(TokenKind::LParen)?;
         let (params, vararg) = self.param_list()?;
         self.expect_kind(TokenKind::RParen)?;
+        let ret_type = self.parse_optional_return_type()?;
         self.expect_kind(TokenKind::Colon)?;
         self.skip_newlines();
         let body = self.block()?;
-        Ok(Stmt::Vidhi { name, params, body, vararg, pure: false, decorators: vec![], is_static: true })
+        Ok(Stmt::Vidhi { name, params, body, vararg, pure: false, decorators: vec![], is_static: true, ret_type })
     }
 
     /// @सजावट / @कारखाना(आर्ग) lines, then a विधि (or शुद्ध विधि) definition.
@@ -414,7 +419,7 @@ impl Parser {
         self.expect_kind(TokenKind::RParen)?;
 
         let params: Vec<Param> = fields.iter()
-            .map(|f| Param { name: f.clone(), karaka: None, default: None })
+            .map(|f| Param { name: f.clone(), karaka: None, default: None, type_hint: None })
             .collect();
         let body: Vec<Stmt> = fields.iter()
             .map(|f| Stmt::AttrAssign {
@@ -431,6 +436,7 @@ impl Parser {
             pure: false,
             decorators: vec![],
             is_static: false,
+            ret_type: None,
         };
         Ok(Stmt::Varg { name, parent: None, methods: vec![ctor], is_abstract: false })
     }
@@ -564,10 +570,11 @@ impl Parser {
         self.expect_kind(TokenKind::LParen)?;
         let (params, vararg) = self.param_list()?;
         self.expect_kind(TokenKind::RParen)?;
+        let ret_type = self.parse_optional_return_type()?;
         self.expect_kind(TokenKind::Colon)?;
         self.skip_newlines();
         let body = self.block()?;
-        Ok(Stmt::Vidhi { name, params, body, vararg, pure: true, decorators: vec![], is_static: false })
+        Ok(Stmt::Vidhi { name, params, body, vararg, pure: true, decorators: vec![], is_static: false, ret_type })
     }
 
     /// विकल्प Name: INDENT variant_line* DEDENT
@@ -1107,6 +1114,8 @@ impl Parser {
             }
             let name = self.expect_ident()?;
             let karaka = self.parse_optional_karaka();
+            // Phase 18 #7: optional `: प्रकार` type annotation — `अ: संख्या`
+            let type_hint = self.parse_optional_type()?;
             // Phase 17: optional constant default — `ब=0`
             let default = if self.check_kind(TokenKind::Assign) {
                 self.advance();
@@ -1120,11 +1129,35 @@ impl Parser {
                 }
                 None
             };
-            params.push(Param { name, karaka, default });
+            params.push(Param { name, karaka, default, type_hint });
             if !self.check_kind(TokenKind::Comma) { break; }
             self.advance();
         }
         Ok((params, vararg))
+    }
+
+    /// Phase 18 #7 — optional `: प्रकार` annotation. Consumes `: <typename>` and
+    /// maps it to a `TypeHint`; returns `None` if there is no colon. Gradual, so
+    /// the annotation is always optional.
+    fn parse_optional_type(&mut self) -> Result<Option<TypeHint>, String> {
+        if self.check_kind(TokenKind::Colon) {
+            self.advance();
+            let tname = self.expect_ident()?;
+            Ok(Some(TypeHint::from_name(&tname)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Phase 18 #7 — optional `-> प्रकार` return annotation after a `)`.
+    fn parse_optional_return_type(&mut self) -> Result<Option<TypeHint>, String> {
+        if self.check_kind(TokenKind::Arrow) {
+            self.advance();
+            let tname = self.expect_ident()?;
+            Ok(Some(TypeHint::from_name(&tname)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Constant default value for a parameter: number, string, bool, or negative number.

@@ -200,7 +200,7 @@ impl Interpreter {
                 Ok(None)
             }
 
-            Stmt::Assign { name, karaka, value } => {
+            Stmt::Assign { name, karaka, value, .. } => {
                 let val = self.eval(value)?;
                 // Register Karaka role before storing value
                 if let Some(k) = karaka {

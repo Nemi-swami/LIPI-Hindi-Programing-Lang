@@ -1,4 +1,5 @@
 mod karaka;
+mod types;
 mod lexer;
 mod ast;
 mod parser;

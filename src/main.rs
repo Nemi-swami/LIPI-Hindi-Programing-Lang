@@ -1,4 +1,6 @@
 mod karaka;
+mod types;
+mod typecheck;
 mod lexer;
 mod ast;
 mod parser;
@@ -294,6 +296,37 @@ fn run_lint(path: &str) {
     lint::lint_source(&source);
 }
 
+/// `lipi check foo.swami` — static type checker (Phase 18 #7). Reports type
+/// mismatches without running the program. Exit 0 if clean, 1 if any mismatch,
+/// 2 on parse/file error.
+fn run_check(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let tokens = lexer::tokenize(&source);
+    let stmts = match parser::parse(tokens) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("व्याकरण त्रुटि: {e}"); show_error_line(&source, &e); std::process::exit(2); }
+    };
+    let diags = typecheck::check(&stmts);
+    if diags.is_empty() {
+        println!("✓ कोई प्रकार-त्रुटि नहीं ({})", path);
+        return;
+    }
+    let lines: Vec<&str> = source.lines().collect();
+    for d in &diags {
+        eprintln!("प्रकार-त्रुटि (पंक्ति {}): {}", d.line, d.message);
+        if d.line >= 1 {
+            if let Some(line) = lines.get(d.line as usize - 1) {
+                eprintln!("  {:>4} │ {}", d.line, line);
+            }
+        }
+    }
+    eprintln!("\n{} प्रकार-त्रुटि मिलीं", diags.len());
+    std::process::exit(1);
+}
+
 /// `lipi doc foo.swami` → emit Markdown documentation to stdout
 fn run_doc(path: &str) {
     let source = match std::fs::read_to_string(path) {
@@ -476,6 +509,9 @@ fn main() {
 
         // lipi lint foo.swami → report linter warnings (Phase 17D)
         [_, cmd, path] if cmd == "lint" => run_lint(path),
+
+        // lipi check foo.swami → static type checker (Phase 18 #7)
+        [_, cmd, path] if cmd == "check" => run_check(path),
 
         // lipi doc foo.swami  → emit Markdown documentation (Phase 17D)
         [_, cmd, path] if cmd == "doc" => run_doc(path),

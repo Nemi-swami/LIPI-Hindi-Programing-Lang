@@ -27,6 +27,7 @@ lipi run foo.libc         # execute precompiled bytecode
 lipi test foo.swami       # run परीक्षण blocks (Phase 17 test framework)
 lipi fmt foo.swami        # auto-format (behavior-preserving + idempotent) — Phase 17D
 lipi lint foo.swami       # flag unused/undefined variables — Phase 17D
+lipi check foo.swami      # static gradual type checker (optional hints) — Phase 18 #7
 lipi doc foo.swami        # emit Markdown docs from विधि/वर्ग + leading comments — Phase 17D
 lipi profile foo.swami    # run + print opcode/function profile report — Phase 17D
 lipi debug foo.swami      # interactive line debugger (step/break/print/vars) — Phase 17D
@@ -64,6 +65,8 @@ lipi foo.vani             # auto-detected by extension
 | `src/editor.rs` | Terminal line editor (`lipi edit`) |
 | `src/formatter.rs` | `lipi fmt` — behavior-preserving, idempotent source formatter (Phase 17D) |
 | `src/lint.rs` | `lipi lint` — unused/undefined variable checker (Phase 17D) |
+| `src/types.rs` | `TypeHint` enum + alias map for gradual type annotations (Phase 18 #7) |
+| `src/typecheck.rs` | `lipi check` — static gradual type checker over the AST (Phase 18 #7) |
 | `src/docgen.rs` | `lipi doc` — Markdown doc generator from विधि/वर्ग + comments (Phase 17D) |
 | `src/bignum.rs` | `भारत.बड़ी` — pure-Rust arbitrary-precision integers (Phase 17B) |
 | `src/net.rs` | `भारत.संजाल` — TCP sockets via std::net + thread-local handle registry (Phase 17C) |
@@ -1611,6 +1614,37 @@ Test file: `examples/phase16_test.swami` — all assertions pass.
 4. **Pure function runtime enforcement** — track global writes inside `शुद्ध` functions
 5. **`n बार तक चरण` loop** — Vedic ritual step counter with named iteration variable
 6. **Graphical profiler** — flame-graph output (current profiler is a text report)
+
+---
+
+## Phase 18 #7 — Gradual type system + `lipi check` — COMPLETE
+
+Optional Devanagari type hints + a static checker. **Gradual**: unannotated code is
+unchanged and never flagged; annotations are **parse-only metadata** — the compiler
+and VM ignore them, `.libc` format is untouched. Zero runtime cost.
+
+```lipi
+विधि जोड़ो(अ: संख्या, ब: संख्या) -> संख्या:
+    फल अ + ब
+नाम: वाक्य है "राम"
+```
+
+- **Type names** (`types.rs` — `TypeHint::from_name`): `संख्या`/`अंक` (Number),
+  `वाक्य`/`पाठ` (Str), `तर्क`/`बूल` (Bool), `सूची` (List), `कोश` (Dict), `शून्य` (Nil),
+  `कुछ_भी` (Any — gradual escape hatch, never flagged). Any other identifier →
+  `Named(class)`, checked permissively.
+- **Syntax**: `:` for value types, `->` for return type (lexer adds `TokenKind::Arrow`).
+  `:` inside `(…)` can't clash with the block `:`. Param order: `name [karaka] [: type] [= default]`.
+- **AST**: `Param.type_hint`, `Stmt::Vidhi.ret_type`, `Stmt::Assign.type_hint` — all
+  `Option<TypeHint>`, ignored by the compiler.
+- **Checker** (`typecheck.rs`, `lipi check`): static pass over the AST. Flags only
+  *concrete* mismatches — (1) non-number operand to `- * / // % & | ^ << >>`, (2) call
+  arg vs declared param type, (3) `फल` vs `-> प्रकार`, (4) annotated var init/reassign.
+  `+` is never flagged (LIPI coerces — Str+Number is idiomatic). `Any`/`Named` silence
+  checks. Exit 0 clean / 1 mismatch / 2 parse error.
+- Tests: `examples/phase18_typecheck_test.swami` (clean — passes check AND runs),
+  `examples/phase18_typecheck_bad.swami` (4 deliberate errors); Rust unit tests in
+  `types.rs` + `typecheck.rs`. Full regression unaffected (annotations optional).
 
 ---
 

@@ -1,13 +1,15 @@
 /// LIPI 2.0 AST — nodes named after Sanskrit grammatical terms
 
 pub use crate::karaka::Karaka;
+pub use crate::types::TypeHint;
 
 pub type Program = Vec<Stmt>;
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    /// नाम [करक] है expr  — assignment with optional Karaka role
-    Assign { name: String, karaka: Option<Karaka>, value: Expr },
+    /// नाम [करक] [: प्रकार] है expr  — assignment with optional Karaka role
+    /// and optional type annotation (Phase 18 #7, gradual — parse-only metadata).
+    Assign { name: String, karaka: Option<Karaka>, type_hint: Option<TypeHint>, value: Expr },
 
     /// बताओ expr
     Print(Expr),
@@ -26,7 +28,9 @@ pub enum Stmt {
     /// Each is Expr::Ident (bare @नाम) or Expr::Call/CallKw (@कारखाना(आर्ग) factory).
     /// is_static (Phase 17): a class method declared `साझा विधि` — no implicit
     /// यह, callable as `ClassName.method(args)`.
-    Vidhi { name: String, params: Vec<Param>, body: Vec<Stmt>, vararg: Option<String>, pure: bool, decorators: Vec<Expr>, is_static: bool },
+    /// ret_type (Phase 18 #7): optional `-> प्रकार` return annotation — gradual,
+    /// parse-only metadata read only by the static checker.
+    Vidhi { name: String, params: Vec<Param>, body: Vec<Stmt>, vararg: Option<String>, pure: bool, decorators: Vec<Expr>, is_static: bool, ret_type: Option<TypeHint> },
 
     /// फल expr
     Fal(Expr),
@@ -171,6 +175,8 @@ pub struct Param {
     pub name: String,
     pub karaka: Option<Karaka>,
     pub default: Option<Expr>,
+    /// Optional `: प्रकार` type annotation (Phase 18 #7, gradual — checker-only).
+    pub type_hint: Option<TypeHint>,
 }
 
 #[derive(Debug, Clone)]
