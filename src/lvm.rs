@@ -1285,6 +1285,8 @@ impl LVM {
                         "भारत.संजाल"      => crate::net::sanjaal_registry(),
                         "भारत.संपीडन"     => crate::zip::sampidan_registry(),
                         "भारत.संग्रह"     => crate::sql::sangraha_registry(),
+                        "भारत.सर्वर"      => crate::server::sarvar_registry(),
+                        "भारत.सूत्र"       => crate::threads::sutra_registry(),
                         "भारत.मात्रक"     => crate::matrak::matrak_registry(),
                         "भारत.रेखीय"      => crate::rekhiy::rekhiy_registry(),
                         "भारत.नियंत्रण"   => crate::niyantran::niyantran_registry(),

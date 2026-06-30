@@ -75,7 +75,9 @@ lipi foo.vani             # auto-detected by extension
 | `src/ide.rs` | `lipi ide` — pure-Rust static server launching LIPI Studio (Phase 18 G) |
 | `src/matrak.rs` | `भारत.मात्रक` — units / dimensional analysis (Phase 18 H1) |
 | `src/rekhiy.rs` | `भारत.रेखीय` — linear algebra: vectors/matrices/quaternions (Phase 18 H2) |
-| `src/niyantran.rs` | `भारत.नियंत्रण` — PID + Kalman control (Phase 18 H3) |
+| `src/niyantran.rs` | `भारत.नियंत्रण` — PID + 1-D/N-D Kalman control (Phase 18 H3) |
+| `src/server.rs` | `भारत.सर्वर` — minimal HTTP server via std::net (Phase 18 #8) |
+| `src/threads.rs` | `भारत.सूत्र` — OS threads / parallel source execution (Phase 18 #9) |
 | `src/disha.rs` | `भारत.दिशा` — navigation / geodesy (Phase 18 H4) |
 | `src/suraksha.rs` | `भारत.सुरक्षा` — Hamming ECC / CRC / TMR fault tolerance (Phase 18 H5) |
 | `src/antaral.rs` | `भारत.अंतराल` — interval arithmetic (Phase 18 H6) |
@@ -595,7 +597,9 @@ Four registries, each returns `Vec<(&'static str, NativeFn)>`:
 | `भारत.संग्रह` | `sql::sangraha_registry()` | Local SQL DB (Phase 17, `src/sql.rs`): `db_नया()` → handle, `db_चलाओ(h, sql)` (SELECT→List of Dict, else affected-count), `db_सहेजो`/`db_खोलो`/`db_बंद`; SQL subset CREATE/INSERT/SELECT(cols,WHERE AND/OR,ORDER BY,LIMIT)/UPDATE/DELETE/DROP; pure Rust, no rusqlite |
 | `भारत.मात्रक` | `matrak::matrak_registry()` | **Mission-critical** units / dimensional analysis (Phase 18, `src/matrak.rs`): `मात्रा(मान,इकाई)`, `जोड़_मात्रा`/`घटा_मात्रा`/`गुणा_मात्रा`/`भाग_मात्रा` (dimension-checked → catchable विमा बेमेल), `मान_में`, `मात्रा_वाक्य`, `विमा_बराबर`. Catches the Mars-Orbiter lbf-vs-N bug class |
 | `भारत.रेखीय` | `rekhiy::rekhiy_registry()` | Linear algebra (Phase 18, `src/rekhiy.rs`): vectors (बिंदु_गुणन/कोण_गुणन/परिमाण/सामान्य/सदिश_योग/दूरी), matrices (आव्यूह_गुणन/परिवर्त/सारणिक/प्रतिलोम/तत्समक), quaternions `[w,x,y,z]` (चतुष्क_गुणन/सामान्य/कोण_से_चतुष्क/चतुष्क_से_कोण/घुमाव/प्रक्षेप slerp) |
-| `भारत.नियंत्रण` | `niyantran::niyantran_registry()` | Control (Phase 18, `src/niyantran.rs`): पीआईडी_बनाओ/पीआईडी_चरण (PID + anti-windup), कलमैन_बनाओ/कलमैन_चरण (1-D Kalman); step fns return `[output, new_state]` |
+| `भारत.नियंत्रण` | `niyantran::niyantran_registry()` | Control (Phase 18, `src/niyantran.rs`): पीआईडी_बनाओ/पीआईडी_चरण (PID + anti-windup), कलमैन_बनाओ/कलमैन_चरण (1-D Kalman), कलमैन_एनडी_बनाओ/कलमैन_एनडी_चरण (N-D Kalman — state Dict {x,P,F,H,Q,R}, pure-Rust matrix predict/update); step fns return `[output, new_state]` |
+| `भारत.सर्वर` | `server::sarvar_registry()` | HTTP server (Phase 18, `src/server.rs`): `सर्वर_बनाओ(port)` → handle, `सर्वर_मार्ग(h, path, body)` register route, `सर्वर_चलाओ(h[, limit])` blocking serve loop (limit=0 → forever, else stop after N requests) → count served; pure std::net HTTP/1.1, thread-local handle registry; WASM = catchable error |
+| `भारत.सूत्र` | `threads::sutra_registry()` | OS threads (Phase 18, `src/threads.rs`): `समानांतर(सूची)` runs each LIPI source string in its own std::thread, collects captured output in input order → List of Str; `सूत्र_गणना()` → available CPU cores; WASM = catchable error |
 | `भारत.दिशा` | `disha::disha_registry()` | Navigation/geodesy (Phase 18, `src/disha.rs`): महावृत्त_दूरी (haversine km), दिशा_कोण (bearing°), गंतव्य (destination), ईसीईएफ (WGS-84 → ECEF); lat/lon in degrees |
 | `भारत.सुरक्षा` | `suraksha::suraksha_registry()` | Fault tolerance (Phase 18, `src/suraksha.rs`): हैमिंग_कूट/हैमिंग_विकोड (Hamming(7,4) corrects single bit-flips), सीआरसी32, बहुमत (TMR voter), समय_सीमा_जाँच (deadline) |
 | `भारत.अंतराल` | `antaral::antaral_registry()` | Interval arithmetic (Phase 18, `src/antaral.rs`): अंतराल/अंतराल_योग/घटा/गुणा/चौड़ाई/मध्य/में — rigorous `[lo,hi]` bounds. Pair with `बीज_सेट(n)` builtin for reproducible runs |
