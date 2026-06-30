@@ -60,6 +60,8 @@
     font-size: 13px; white-space: pre-wrap; }
   #problems { display: none; }
   .prob { color: var(--red); cursor: pointer; padding: 2px 0; }
+  .dbg-line { background: rgba(255,200,0,0.16); }
+  .dbg-gutter { background: var(--blue); width: 4px !important; margin-left: 3px; }
   /* status bar */
   #status { grid-column: 1 / 4; background: #007acc; color: #fff; display: flex; align-items: center;
     gap: 16px; padding: 0 12px; font-size: 12px; }
@@ -71,6 +73,7 @@
   <div id="titlebar">
     <span class="brand">◆ LIPI Studio</span>
     <button class="tb" id="run">▶ चलाओ (Ctrl+Enter)</button>
+    <button class="tb ghost" id="debug" title="चरण-दर-चरण डिबग: पंक्ति + चर देखें">🐞 डिबग</button>
     <button class="tb ghost" id="fmt">स्वरूप</button>
     <button class="tb ghost" id="translit" title="लाइव रोमन इनपुट: QWERTY में टाइप करें, देवनागरी पाएँ">⌨ इनपुट: देवनागरी</button>
     <button class="tb ghost" id="convert" title="पूरी फ़ाइल को रोमन से देवनागरी में बदलें">A→अ रूपांतर</button>
@@ -271,6 +274,55 @@ function lint() {
 }
 function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+// ── Step debugger (trace replay) ──
+let traceSteps = [], traceIdx = 0, debugDecos = [];
+function debug() {
+  if (!wasm || !editor || !monacoRef) return;
+  let res;
+  try { res = JSON.parse(wasm.lipi_trace(editor.getValue())); }
+  catch (e) { flashStatus('ट्रेस विफल', 'var(--red)'); return; }
+  traceSteps = res.steps || [];
+  traceIdx = 0;
+  showPanel('output');
+  if (!traceSteps.length) {
+    document.getElementById('output').textContent =
+      res.error ? ('त्रुटि: ' + res.error) : '(कोई चरण नहीं — खाली कार्यक्रम?)';
+    return;
+  }
+  renderTrace();
+}
+function renderTrace() {
+  const s = traceSteps[traceIdx];
+  // highlight current line in Monaco
+  debugDecos = editor.deltaDecorations(debugDecos, [{
+    range: new monacoRef.Range(s.line, 1, s.line, 1),
+    options: { isWholeLine: true, className: 'dbg-line',
+               linesDecorationsClassName: 'dbg-gutter' }
+  }]);
+  editor.revealLineInCenter(s.line);
+  const vars = Object.keys(s.vars).map(k =>
+    `<tr><td style="color:var(--blue);padding-right:12px">${escapeHtml(k)}</td>`+
+    `<td>${escapeHtml(s.vars[k])}</td></tr>`).join('') ||
+    '<tr><td style="color:var(--fg2)">(कोई चर नहीं)</td></tr>';
+  const err = traceSteps[traceIdx] && (traceIdx===traceSteps.length-1) && window.__traceErr;
+  document.getElementById('output').innerHTML =
+    `<div style="font-family:sans-serif">
+      <div style="margin-bottom:8px">
+        <button class="tb ghost" onclick="traceStep(-1)">◀ पिछला</button>
+        <button class="tb ghost" onclick="traceStep(1)">अगला ▶</button>
+        <span style="margin-left:12px;color:var(--fg2)">
+          चरण ${traceIdx+1}/${traceSteps.length} · पंक्ति ${s.line} · गहराई ${s.depth}</span>
+      </div>
+      <table style="border-collapse:collapse">${vars}</table>
+    </div>`;
+}
+function traceStep(d) {
+  if (!traceSteps.length) return;
+  traceIdx = Math.max(0, Math.min(traceSteps.length-1, traceIdx+d));
+  renderTrace();
+}
+window.traceStep = traceStep;
+
 // ── Tabs / files ──
 function renderTabs() {
   const t = document.getElementById('tabs'); t.innerHTML = '';
@@ -332,6 +384,7 @@ function flashStatus(msg, color) {
   setTimeout(() => { el.textContent = prev; el.style.color = prevC; }, 2200);
 }
 document.getElementById('run').onclick = run;
+document.getElementById('debug').onclick = debug;
 document.getElementById('fmt').onclick = () => {
   if (!editor || !wasm) { flashStatus('WASM तैयार नहीं', 'var(--red)'); return; }
   const src = editor.getValue();

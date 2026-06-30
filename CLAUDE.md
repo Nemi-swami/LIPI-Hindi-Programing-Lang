@@ -31,6 +31,7 @@ lipi check foo.swami      # static gradual type checker (optional hints) — Pha
 lipi doc foo.swami        # emit Markdown docs from विधि/वर्ग + leading comments — Phase 17D
 lipi profile foo.swami    # run + print opcode/function profile report — Phase 17D
 lipi debug foo.swami      # interactive line debugger (step/break/print/vars) — Phase 17D
+lipi trace foo.swami      # JSON step trace (line+vars+depth) for the in-IDE debugger — Phase I
 lipi lsp                  # Language Server Protocol over stdio — Phase 17D
 lipi pkg init|add|install|list   # local package manager (lipi.toml + lipi_modules/) — Phase 17D
 lipi edit foo.swami       # open terminal editor with line numbers

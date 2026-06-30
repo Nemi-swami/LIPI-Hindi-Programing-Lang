@@ -44,10 +44,12 @@ Pure Rust core, no external crates (frontend JS assets like Monaco are allowed, 
       correct MIME types incl application/wasm, auto-opens browser; verified serving all assets.
 - [x] G5 **Desktop feel** — DONE 2026-06-30 — launcher opens Chrome/Edge in `--app` mode (standalone-window
       look) when found, else default browser. No GUI crate.
-- [~] G6 **In-IDE debugger** — PARTIAL — Problems panel with click-to-line navigation + live error markers
-      shipped; full in-browser step-debugger (breakpoints/variables) deferred (CLI `lipi debug` covers it).
-      NOTE: browser rendering itself not auto-tested (no headless browser available); server/MIME/WASM
-      exports/JS-syntax/HTML-structure all verified.
+- [x] G6 **In-IDE debugger** — DONE 2026-07-01 (Phase I2) — trace-replay step debugger. `LVM::run_trace`
+      records line+vars+depth per step as JSON; exposed via CLI `lipi trace` AND WASM `lipi_trace`.
+      LIPI Studio: 🐞 डिबग button → step ◀/▶ through execution, current line highlighted in Monaco
+      (deltaDecorations + gutter), variables shown per step. Engine CLI-verified (line progression,
+      params at depth 1, final values); WASM export confirmed in web/pkg/lipi.js. Browser rendering
+      itself still not headless-tested (no headless browser).
 
 ## Phase H — Mission-Critical Computing suite (ALL six, pure Rust)
 - [ ] H1 **`भारत.मात्रक` (units / dimensional analysis)** — values carry SI units; arithmetic checks/propagates
