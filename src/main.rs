@@ -82,6 +82,29 @@ fn run_profile(path: &str) {
     }
 }
 
+/// `lipi trace foo.swami` — print a JSON step trace (line + variables per step)
+/// for the in-IDE debugger's replay view. Verifiable headless equivalent of the
+/// browser stepper.
+fn run_trace(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => {
+            if path.ends_with(".roman") || path.ends_with(".r") { roman::roman_to_devanagari(&s) }
+            else if path.ends_with(".vani") { phonetic::vani_to_devanagari(&s) }
+            else { s }
+        }
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let tokens = lexer::tokenize(&source);
+    match parser::parse(tokens) {
+        Ok(stmts) => {
+            let program = compiler::Compiler::compile_program(&stmts);
+            let mut vm = lvm::LVM::new();
+            println!("{}", vm.run_trace(&program));
+        }
+        Err(e) => { eprintln!("पार्स त्रुटि: {e}"); std::process::exit(2); }
+    }
+}
+
 /// `lipi debug foo.swami` — run the program under the interactive line debugger.
 fn run_debug(path: &str) {
     let source = match std::fs::read_to_string(path) {
@@ -534,6 +557,9 @@ fn main() {
 
         // lipi debug foo.swami → interactive line debugger (Phase 17D)
         [_, cmd, path] if cmd == "debug" => run_debug(path),
+
+        // lipi trace foo.swami → JSON step trace for the in-IDE debugger (Phase I)
+        [_, cmd, path] if cmd == "trace" => run_trace(path),
 
         // lipi foo.libc [a b c] → execute precompiled bytecode (args → तर्क())
         [_, path, rest @ ..] if path.ends_with(".libc") => {

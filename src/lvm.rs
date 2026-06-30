@@ -735,6 +735,75 @@ impl LVM {
         Ok(())
     }
 
+    /// Record a step-by-step execution trace for the in-IDE debugger. Returns a
+    /// JSON array of `{"line":N,"depth":D,"vars":{name:"val",…}}` — one entry each
+    /// time execution reaches a new source line (line-granularity, like the CLI
+    /// stepper). Bounded to MAX_TRACE steps. `err` is set on an uncaught error.
+    pub fn run_trace(&mut self, program: &CompiledProgram) -> String {
+        const MAX_TRACE: usize = 200_000;
+        self.functions = program.functions.clone();
+        self.class_parents = program.class_parents.clone();
+        let instructions = program.instructions.clone();
+        let mut ip = 0usize;
+        let mut last_line: u32 = 0;
+        let mut steps: Vec<String> = Vec::new();
+        let mut err: Option<String> = None;
+
+        let esc = |s: &str| -> String {
+            let mut o = String::with_capacity(s.len() + 2);
+            for c in s.chars() {
+                match c { '"' => o.push_str("\\\""), '\\' => o.push_str("\\\\"),
+                          '\n' => o.push_str("\\n"), '\t' => o.push_str("\\t"),
+                          _ => o.push(c) }
+            }
+            o
+        };
+
+        'vm: while ip < instructions.len() {
+            let line = program.lines.get(ip).copied().unwrap_or(0);
+            if line != 0 && line != last_line && steps.len() < MAX_TRACE {
+                last_line = line;
+                // collect visible variables: locals (current frame) then globals
+                let mut pairs: Vec<(String, String)> = Vec::new();
+                if let Some(f) = self.call_frames.last() {
+                    let mut keys: Vec<&String> = f.locals.keys().filter(|k| !k.starts_with("__")).collect();
+                    keys.sort();
+                    for k in keys { pairs.push((k.clone(), format!("{}", f.locals[k]))); }
+                }
+                let mut gkeys: Vec<&String> = self.globals.keys()
+                    .filter(|k| !k.starts_with("__") && !is_builtin_global(k)).collect();
+                gkeys.sort();
+                for k in gkeys { pairs.push((k.clone(), format!("{}", self.globals[k]))); }
+                let vars = pairs.iter()
+                    .map(|(k, v)| format!("\"{}\":\"{}\"", esc(k), esc(v)))
+                    .collect::<Vec<_>>().join(",");
+                steps.push(format!("{{\"line\":{},\"depth\":{},\"vars\":{{{}}}}}",
+                    line, self.call_frames.len(), vars));
+            }
+            let op = &instructions[ip];
+            ip += 1;
+            match self.exec_op(op, &mut ip, &instructions) {
+                Ok(true) => break 'vm,
+                Ok(false) => {}
+                Err(e) => {
+                    if let Some(tf) = self.try_stack.pop() {
+                        self.stack.truncate(tf.stack_depth);
+                        self.call_frames.truncate(tf.frame_depth);
+                        let errval = self.thrown.take().unwrap_or(Value::Str(e));
+                        self.stack.push(errval);
+                        ip = tf.handler_ip;
+                    } else {
+                        self.thrown = None;
+                        err = Some(self.format_uncaught(e, ip, &program.lines));
+                        break 'vm;
+                    }
+                }
+            }
+        }
+        let errfield = match err { Some(e) => format!(",\"error\":\"{}\"", esc(&e)), None => String::new() };
+        format!("{{\"steps\":[{}]{}}}", steps.join(","), errfield)
+    }
+
     /// Build the user-facing report for an uncaught runtime error:
     /// `message (पंक्ति N)` plus one trace line per active call frame,
     /// innermost first. Line 0 / sentinel addresses are silently skipped.

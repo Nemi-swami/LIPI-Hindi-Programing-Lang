@@ -54,6 +54,22 @@ pub fn run_source(src: &str) -> String {
     }
 }
 
+/// Run the program and return a JSON step trace for the in-IDE debugger:
+/// {"steps":[{"line":N,"depth":D,"vars":{name:"val",…}}],"error?":"…"}.
+/// On a parse error returns {"steps":[],"error":"…"}.
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub fn lipi_trace(src: &str) -> String {
+    let tokens = lexer::tokenize(src);
+    match parser::parse(tokens) {
+        Ok(stmts) => {
+            let program = compiler::Compiler::compile_program(&stmts);
+            let mut vm = lvm::LVM::new_capturing();
+            vm.run_trace(&program)
+        }
+        Err(e) => format!("{{\"steps\":[],\"error\":{}}}", json_str(&e)),
+    }
+}
+
 fn json_str(s: &str) -> String {
     let mut o = String::from("\"");
     for c in s.chars() {
