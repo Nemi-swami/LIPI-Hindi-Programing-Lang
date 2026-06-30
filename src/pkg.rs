@@ -16,6 +16,64 @@ use std::path::Path;
 const MANIFEST: &str = "lipi.toml";
 const MODULES_DIR: &str = "lipi_modules";
 
+/// True if `src` looks like a git remote (vs. a local path). Optional `#ref`
+/// (tag/branch) is allowed after the URL.
+fn is_git_source(src: &str) -> bool {
+    let s = src.split('#').next().unwrap_or(src);
+    s.starts_with("http://")
+        || s.starts_with("https://")
+        || s.starts_with("git@")
+        || s.starts_with("ssh://")
+        || s.ends_with(".git")
+}
+
+/// Split a git source into (url, optional ref). `https://x/y#v1` → ("https://x/y", Some("v1")).
+fn split_git_ref(src: &str) -> (&str, Option<&str>) {
+    match src.find('#') {
+        Some(i) => (&src[..i], Some(&src[i + 1..])),
+        None => (src, None),
+    }
+}
+
+/// Clone a git dependency into `lipi_modules/<name>.swami`. Shells out to the
+/// user's `git` (LIPI's own http client is http-only/no-TLS, can't reach GitHub).
+fn install_git(name: &str, src: &str) -> Result<(), String> {
+    use std::process::Command;
+    let (url, gitref) = split_git_ref(src);
+    // Temp clone dir under the modules dir so it stays on the same drive.
+    let tmp = format!("{MODULES_DIR}/.tmp_{name}");
+    let _ = std::fs::remove_dir_all(&tmp);
+
+    let mut cmd = Command::new("git");
+    cmd.arg("clone").arg("--depth").arg("1");
+    if let Some(r) = gitref {
+        cmd.arg("--branch").arg(r);
+    }
+    cmd.arg(url).arg(&tmp);
+    let out = cmd.output().map_err(|e| {
+        format!("git नहीं चला ('{e}') — कृपया git इंस्टॉल करें या PATH में जोड़ें")
+    })?;
+    if !out.status.success() {
+        let _ = std::fs::remove_dir_all(&tmp);
+        let err = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("git clone विफल: {}", err.trim()));
+    }
+
+    // Locate the entry file: <name>.swami, else lib.swami.
+    let cand1 = Path::new(&tmp).join(format!("{name}.swami"));
+    let cand2 = Path::new(&tmp).join("lib.swami");
+    let entry = if cand1.exists() { Some(cand1) } else if cand2.exists() { Some(cand2) } else { None };
+    let result = match entry {
+        Some(p) => {
+            let dest = format!("{MODULES_DIR}/{name}.swami");
+            std::fs::copy(&p, &dest).map(|_| ()).map_err(|e| format!("कॉपी विफल: {e}"))
+        }
+        None => Err(format!("रिपॉज़िटरी में {name}.swami या lib.swami नहीं मिला")),
+    };
+    let _ = std::fs::remove_dir_all(&tmp);
+    result
+}
+
 /// A tiny manifest: package name/version + name→path dependencies. We parse only
 /// the subset of TOML we emit (sections, `key = "value"`).
 struct Manifest {
@@ -108,7 +166,7 @@ fn init() {
 
 fn add(name: &str, path: &str) {
     let mut m = match Manifest::load() { Ok(m) => m, Err(e) => { eprintln!("{e}"); return; } };
-    if !Path::new(path).exists() {
+    if !is_git_source(path) && !Path::new(path).exists() {
         eprintln!("चेतावनी: निर्भरता पथ '{path}' अभी मौजूद नहीं है");
     }
     m.deps.insert(name.to_string(), path.to_string());
@@ -146,6 +204,13 @@ fn install() {
     let mut ok = 0;
     let mut fail = 0;
     for (name, src) in &m.deps {
+        if is_git_source(src) {
+            match install_git(name, src) {
+                Ok(()) => { println!("✓ {name} → {MODULES_DIR}/{name}.swami (git)"); ok += 1; }
+                Err(e) => { eprintln!("✗ {name}: {e}"); fail += 1; }
+            }
+            continue;
+        }
         let src_path = Path::new(src);
         let dest = format!("{MODULES_DIR}/{name}.swami");
         let result = if src_path.is_dir() {

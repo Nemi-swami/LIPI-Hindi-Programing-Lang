@@ -65,6 +65,25 @@ Pure Rust core, no external crates (frontend JS assets like Monaco are allowed, 
       [lo, hi]; a `--deterministic` run mode forbidding यादृच्छिक/समय_अभी/network for bit-exact reproducible
       simulations (verification & validation).
 
+## Phase I — Shareable addons / package integrations (was lost #10)
+- [ ] I1 **Remote package install via git** — let ANY person publish a `.swami` addon (a repo with
+      `<name>.swami` or `lib.swami` at root) and let anyone install it by link. PENDING — designed
+      with user 2026-06-30, approved.
+      - `lipi pkg add <नाम> <स्रोत>` accepts a git URL (starts `http://`/`https://`/`git@`/`ssh://`,
+        or ends `.git`) in addition to a local path; optional `#ref` pins a tag/branch. Stored in
+        `lipi.toml` deps as-is (value = URL).
+      - `lipi pkg install`: for git deps → `git clone --depth 1` into a temp dir, locate entry file
+        (`<name>.swami` else `lib.swami`, same rule as existing dir deps), copy to
+        `lipi_modules/<name>.swami`, clean up temp. Local-path deps unchanged. `आयात "<नाम>"` works as-is.
+      - Pure Rust: shells out to the user's `git` (LIPI's own http client is http-only / no TLS, can't
+        reach GitHub https). Decided over curl/http-only.
+      - Clear catchable Hindi errors: git not installed / clone failed / entry file missing; install
+        still prints "X सफल, Y विफल" and never crashes.
+      - Test OFFLINE: create a local throwaway git repo as a package, `pkg add` + `install` it, run a
+        `.swami` that imports + calls it (git clones from a local folder, no network needed).
+      - Files: `src/pkg.rs` (no compiler/VM/serializer changes — import resolution already handles
+        `lipi_modules/`).
+
 ## Final
 - [ ] Full regression green + new test files per item
 - [ ] Update CLAUDE.md (modules/builtins/CLI), task_plan.md, memory
