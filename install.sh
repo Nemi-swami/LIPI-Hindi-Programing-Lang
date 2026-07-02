@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
 # LIPI one-command installer for Linux / macOS.
-#   curl -fsSL https://raw.githubusercontent.com/<you>/lipi-lang/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Nemi-swami/LIPI-Hindi-Programing-Lang/main/install.sh | sh
 #
 # Builds from source with the default Rust toolchain and installs `lipi` to
 # ~/.local/bin (override with LIPI_PREFIX). Requires: git, cargo, a C toolchain.
 set -eu
 
-REPO="${LIPI_REPO:-https://github.com/naraxcel/lipi-lang.git}"
+REPO="${LIPI_REPO:-https://github.com/Nemi-swami/LIPI-Hindi-Programing-Lang.git}"
 PREFIX="${LIPI_PREFIX:-$HOME/.local/bin}"
 WORK="${TMPDIR:-/tmp}/lipi-build-$$"
 

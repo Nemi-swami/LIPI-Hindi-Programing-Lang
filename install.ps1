@@ -1,11 +1,11 @@
 # LIPI one-command installer for Windows (PowerShell).
-#   irm https://raw.githubusercontent.com/<you>/lipi-lang/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Nemi-swami/LIPI-Hindi-Programing-Lang/main/install.ps1 | iex
 #
 # Clones the repo, builds with Cargo (release), and installs lipi.exe to
 # %LOCALAPPDATA%\LIPI\bin (override with $env:LIPI_PREFIX). Requires: git, cargo.
 $ErrorActionPreference = 'Stop'
 
-$repo   = if ($env:LIPI_REPO)   { $env:LIPI_REPO }   else { 'https://github.com/naraxcel/lipi-lang.git' }
+$repo   = if ($env:LIPI_REPO)   { $env:LIPI_REPO }   else { 'https://github.com/Nemi-swami/LIPI-Hindi-Programing-Lang.git' }
 $prefix = if ($env:LIPI_PREFIX) { $env:LIPI_PREFIX } else { Join-Path $env:LOCALAPPDATA 'LIPI\bin' }
 $work   = Join-Path $env:TEMP ("lipi-build-" + [guid]::NewGuid().ToString('N'))
 

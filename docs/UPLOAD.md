@@ -8,7 +8,7 @@ in Releases, not the repo.
 
 ```sh
 # In the repo root:
-git remote add origin https://github.com/<you>/lipi-lang.git
+git remote add origin https://github.com/Nemi-swami/LIPI-Hindi-Programing-Lang.git
 git branch -M main
 git push -u origin main
 ```
@@ -35,7 +35,7 @@ gh release create v0.2.0 dist/LIPI-Setup.exe dist/lipi-0.2.0-windows-x64.zip \
 ```
 
 Now the install commands in the README and the landing page resolve:
-`irm .../install.ps1 | iex`, `winget install LIPI.LIPI`, `brew install <you>/tap/lipi`.
+`irm .../install.ps1 | iex`, `winget install LIPI.LIPI`, `brew install Nemi-swami/tap/lipi`.
 
 ## 3 · Host the website + playground
 
@@ -49,7 +49,7 @@ See `docs/DEPLOY_PLAYGROUND.md` for the WASM build step and share-URL wiring.
 
 ## 4 · Update the placeholders
 
-Replace `<you>` / `naraxcel` in these files with your GitHub handle:
+All repo URLs point at `Nemi-swami/LIPI-Hindi-Programing-Lang`. Update them if you fork/rename.
 `install.sh`, `install.ps1`, `packaging/homebrew/lipi.rb`,
 `packaging/winget/LIPI.LIPI.yaml`, `web/site/index.html`, `README.md`.
 
@@ -57,5 +57,5 @@ Replace `<you>` / `naraxcel` in these files with your GitHub handle:
 - [ ] `git remote add origin … && git push -u origin main`
 - [ ] `gh release create v0.2.0 dist/*.exe dist/*.zip`
 - [ ] Enable GitHub Pages (or deploy `web/` to a host)
-- [ ] Replace `<you>` placeholders with your handle
+- [ ] Replace `Nemi-swami` placeholders with your handle
 - [ ] (optional) Submit winget manifest / Homebrew tap / VSCode `.vsix`

@@ -8,7 +8,7 @@ PackageName: LIPI
 Publisher: LIPI
 License: MIT
 ShortDescription: Programming language with Devanagari syntax, compiled to a bytecode VM (pure Rust).
-PackageUrl: https://github.com/naraxcel/lipi-lang
+PackageUrl: https://github.com/Nemi-swami/LIPI-Hindi-Programing-Lang
 Moniker: lipi
 Tags:
   - programming-language
@@ -19,7 +19,7 @@ Tags:
 Installers:
   - Architecture: x64
     InstallerType: portable
-    InstallerUrl: https://github.com/naraxcel/lipi-lang/releases/download/v0.2.0/lipi.exe
+    InstallerUrl: https://github.com/Nemi-swami/LIPI-Hindi-Programing-Lang/releases/download/v0.2.0/lipi.exe
     InstallerSha256: REPLACE_WITH_EXE_SHA256
     Commands:
       - lipi
