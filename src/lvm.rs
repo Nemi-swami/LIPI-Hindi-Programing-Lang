@@ -1395,6 +1395,7 @@ impl LVM {
                         "भारत.यामल"       => crate::yaml::yaml_registry(),
                         "भारत.एक्सएमएल"   => crate::xmlparse::xml_registry(),
                         "भारत.तर्कपार्स"  => crate::argparse::argparse_registry(),
+                        "भारत.डाक"        => crate::daak::daak_registry(),
                         other => return Err(format!("अज्ञात मॉड्यूल: {}", other)),
                     };
                     for (fname, func) in registry {

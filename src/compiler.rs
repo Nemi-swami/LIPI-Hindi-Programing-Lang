@@ -919,6 +919,9 @@ impl Compiler {
                     "भारत.तर्कपार्स" => {
                         self.imported_natives.insert("तर्क_पार्स".into());
                     }
+                    "भारत.डाक" => {
+                        self.imported_natives.insert("डाक_भेजो".into());
+                    }
                     _ => {}
                 }
                 self.emit(Opcode::Import(module.clone()));

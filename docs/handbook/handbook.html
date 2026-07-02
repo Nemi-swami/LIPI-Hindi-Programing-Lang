@@ -1,0 +1,386 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>The LIPI Handbook</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm; }
+  @page :first { margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: "Segoe UI","Nirmala UI",Arial,sans-serif; color:#1c2230; font-size:10.6pt; line-height:1.55; margin:0; }
+  code,pre { font-family:"Consolas","Cascadia Code","Courier New",monospace; }
+
+  /* cover */
+  .cover { height:297mm; background:linear-gradient(150deg,#0e1220 0%,#1a2136 55%,#241a3a 100%); color:#fff;
+           display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; page-break-after:always; }
+  .cover img { width:130px; height:130px; margin-bottom:10mm; }
+  .cover h1 { font-size:44pt; margin:0; letter-spacing:-1px; }
+  .cover .sub { color:#a7b6d6; font-size:15pt; margin-top:4mm; max-width:150mm; }
+  .cover .meta { margin-top:16mm; color:#6f7f9e; font-size:11pt; }
+  .cover .grad { background:linear-gradient(120deg,#ff8a3d,#ff5f6d,#9b5cff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+  h2 { font-size:18pt; color:#0e2a52; border-bottom:2px solid #ff5f6d; padding-bottom:2mm; margin:0 0 4mm; page-break-after:avoid; }
+  h3 { font-size:12.5pt; color:#7a2ea8; margin:6mm 0 2mm; page-break-after:avoid; }
+  p { margin:0 0 3mm; }
+  ul { margin:0 0 3mm; padding-left:6mm; } li { margin:1mm 0; }
+  .page { page-break-before:always; }
+  pre { background:#0f1117; color:#e6e6e6; padding:3mm 4mm; border-radius:5px; font-size:9.3pt; line-height:1.45;
+        white-space:pre-wrap; margin:2mm 0; }
+  .kw{color:#ff9d5c} .str{color:#7ee787} .cm{color:#7c869a} .fn{color:#6cb6ff}
+  .out { border-left:3px solid #2ecc71; background:#f2fbf5; padding:1.5mm 3mm; margin:1mm 0 4mm; font-family:Consolas,monospace; font-size:9.3pt; }
+  .out b { color:#1e7e45; }
+  table { border-collapse:collapse; width:100%; font-size:9.3pt; margin:2mm 0 4mm; }
+  th,td { border:1px solid #d5dbe6; padding:1.5mm 2.5mm; text-align:left; vertical-align:top; }
+  th { background:#eef2f9; color:#0e2a52; }
+  .toc a { color:#1c2230; text-decoration:none; }
+  .toc li { margin:1.5mm 0; }
+  .note { background:#fff7ec; border-left:3px solid #ff9d5c; padding:2mm 3mm; font-size:9.5pt; margin:2mm 0 4mm; }
+  .hd { display:flex; align-items:center; gap:3mm; margin-bottom:5mm; }
+  .hd img{width:26px;height:26px} .hd b{color:#7a2ea8}
+  footer { position:fixed; bottom:6mm; left:0; right:0; text-align:center; color:#9aa6bb; font-size:8pt; }
+</style></head><body>
+
+<!-- COVER -->
+<section class="cover">
+  <img src="../../web/site/logo.svg" alt="LIPI">
+  <h1>The <span class="grad">LIPI</span> Handbook</h1>
+  <div class="sub">A programming language with Devanagari syntax — compiled to a bytecode VM in 100% pure Rust, running on desktop and in the browser.</div>
+  <div class="meta">Version 0.2 · Language guide, standard library, and Hindi tutorial</div>
+</section>
+
+<!-- TOC -->
+<section class="page">
+  <div class="hd"><img src="../../web/site/logo.svg"><b>LIPI Handbook</b></div>
+  <h2>Contents</h2>
+  <ol class="toc">
+    <li><a href="#intro">1 · What is LIPI</a></li>
+    <li><a href="#install">2 · Installation</a></li>
+    <li><a href="#basics">3 · Language basics</a></li>
+    <li><a href="#flow">4 · Control flow</a></li>
+    <li><a href="#fns">5 · Functions, closures &amp; lambdas</a></li>
+    <li><a href="#coll">6 · Lists &amp; dictionaries</a></li>
+    <li><a href="#oop">7 · Classes &amp; objects</a></li>
+    <li><a href="#err">8 · Error handling</a></li>
+    <li><a href="#stdlib">9 · The भारत standard library</a></li>
+    <li><a href="#formats">10 · Config &amp; data formats</a></li>
+    <li><a href="#nolimit">11 · FFI, hardware &amp; HTTPS — the no-limits tier</a></li>
+    <li><a href="#tools">12 · Tooling</a></li>
+    <li><a href="#tutorial">13 · परिचय — a tutorial in Hindi</a></li>
+    <li><a href="#cheat">14 · Quick reference</a></li>
+  </ol>
+</section>
+
+<!-- 1 INTRO -->
+<section class="page" id="intro">
+  <h2>1 · What is LIPI</h2>
+  <p>LIPI (लिपि) is a general-purpose programming language whose keywords, error messages, and standard library are <b>Devanagari-native</b>. You write code in Hindi/Sanskrit vocabulary; the compiler turns it into bytecode for a stack virtual machine (the LVM), which then executes. The entire system is written in <b>100% pure Rust</b> with no external dependencies, and also compiles to WebAssembly to run in a browser.</p>
+  <h3>Why it exists</h3>
+  <p>Every English-keyword language adds a translation tax for a programmer who thinks in Hindi. LIPI removes it, and ships a standard library that already speaks Indian-context domains (Aadhaar, UPI, GST, IST) alongside a general toolkit.</p>
+  <h3>The execution pipeline</h3>
+  <pre>source.swami
+  → lexer      (Devanagari tokens, INDENT/DEDENT)
+  → parser     (SOV grammar → AST)
+  → compiler   (AST → LVM bytecode)
+  → LVM        (stack VM → output)</pre>
+  <p>The first program:</p>
+  <pre><span class="kw">बताओ</span> <span class="str">"नमस्ते दुनिया"</span></pre>
+  <div class="out"><b>Output:</b> नमस्ते दुनिया</div>
+</section>
+
+<!-- 2 INSTALL -->
+<section class="page" id="install">
+  <h2>2 · Installation</h2>
+  <table>
+    <tr><th>Platform</th><th>Command</th></tr>
+    <tr><td>Linux</td><td><code>curl -fsSL .../install.sh | sh</code></td></tr>
+    <tr><td>macOS</td><td><code>brew install &lt;you&gt;/tap/lipi</code> &nbsp;or the install script</td></tr>
+    <tr><td>Windows</td><td><code>irm .../install.ps1 | iex</code> &nbsp;or the <code>.exe</code> + <code>install.bat</code></td></tr>
+    <tr><td>From source</td><td><code>cargo build --release</code> → <code>target/release/lipi</code></td></tr>
+  </table>
+  <h3>The CLI</h3>
+  <table>
+    <tr><th>Command</th><th>Does</th></tr>
+    <tr><td><code>lipi foo.swami</code></td><td>compile + run</td></tr>
+    <tr><td><code>lipi build / run</code></td><td>compile to <code>.libc</code> bytecode / execute it</td></tr>
+    <tr><td><code>lipi test / fmt / lint</code></td><td>run tests / format / lint</td></tr>
+    <tr><td><code>lipi doc / profile / debug</code></td><td>docs / profiler / step debugger</td></tr>
+    <tr><td><code>lipi lsp / pkg / ide</code></td><td>language server / package manager / browser IDE</td></tr>
+    <tr><td><code>lipi</code></td><td>REPL</td></tr>
+  </table>
+</section>
+
+<!-- 3 BASICS -->
+<section class="page" id="basics">
+  <h2>3 · Language basics</h2>
+  <h3>Variables &amp; printing</h3>
+  <pre>क <span class="kw">है</span> 5                <span class="cm">। assignment ।</span>
+अ, ब <span class="kw">है</span> 1, 2          <span class="cm"># tuple unpacking</span>
+<span class="kw">बताओ</span> क + 1             <span class="cm"># print with newline</span>
+<span class="kw">लिखो</span> <span class="str">"नाम: "</span>          <span class="cm"># print, no newline</span>
+<span class="kw">बताओ</span> ५ लाख            <span class="cm"># Devanagari digits + lakh suffix</span></pre>
+  <div class="out"><b>Output:</b> 6 &nbsp;/&nbsp; नाम: &nbsp;/&nbsp; 500000</div>
+  <h3>Operators</h3>
+  <table>
+    <tr><th>Kind</th><th>Operators</th></tr>
+    <tr><td>Arithmetic</td><td><code>+ - * / % //</code> (floor div)</td></tr>
+    <tr><td>Compare</td><td><code>से अधिक</code> (&gt;) · <code>से कम</code> (&lt;) · <code>बराबर</code> (==) · <code>!=</code> · chainable <code>0 &lt; x &lt; 10</code></td></tr>
+    <tr><td>Boolean</td><td><code>और</code> · <code>या</code> · <code>नहीं</code></td></tr>
+    <tr><td>Bitwise</td><td><code>&amp; | ^ ~ &lt;&lt; &gt;&gt;</code></td></tr>
+    <tr><td>Membership</td><td><code>x में_है सूची</code> · <code>x नहीं_है सूची</code></td></tr>
+  </table>
+  <pre><span class="kw">बताओ</span> 7 // 2      <span class="cm"># 3</span>
+<span class="kw">बताओ</span> 12 &amp; 10     <span class="cm"># 8</span>
+<span class="kw">बताओ</span> <span class="str">"नमस्ते {नाम}!"</span>   <span class="cm"># string interpolation</span></pre>
+</section>
+
+<!-- 4 CONTROL FLOW -->
+<section class="page" id="flow">
+  <h2>4 · Control flow</h2>
+  <h3>Conditionals</h3>
+  <pre><span class="kw">यदि</span> क <span class="kw">से अधिक</span> 10:
+    <span class="kw">बताओ</span> <span class="str">"बड़ा"</span>
+<span class="kw">अन्यथा यदि</span> क <span class="kw">बराबर</span> 10:
+    <span class="kw">बताओ</span> <span class="str">"बराबर"</span>
+<span class="kw">अन्यथा</span>:
+    <span class="kw">बताओ</span> <span class="str">"छोटा"</span>
+
+परिणाम <span class="kw">है</span> <span class="kw">यदि</span> क <span class="kw">से अधिक</span> 5 <span class="kw">तो</span> <span class="str">"बड़ा"</span> <span class="kw">अन्यथा</span> <span class="str">"छोटा"</span>   <span class="cm"># ternary</span></pre>
+  <h3>Loops</h3>
+  <pre>5 <span class="kw">बार करो</span>:              <span class="cm"># repeat N times</span>
+    <span class="kw">बताओ</span> <span class="str">"लूप"</span>
+
+i <span class="kw">के लिए</span> 10 <span class="kw">में</span>:         <span class="cm"># for i in 0..9</span>
+    <span class="kw">बताओ</span> i
+
+<span class="kw">जब तक</span> क <span class="kw">से कम</span> 10:        <span class="cm"># while</span>
+    क <span class="kw">है</span> क + 1
+    <span class="kw">यदि</span> क <span class="kw">बराबर</span> 5: <span class="kw">अगला</span>    <span class="cm"># continue</span>
+    <span class="kw">यदि</span> क <span class="kw">बराबर</span> 8: <span class="kw">बंद करो</span>  <span class="cm"># break</span></pre>
+</section>
+
+<!-- 5 FUNCTIONS -->
+<section class="page" id="fns">
+  <h2>5 · Functions, closures &amp; lambdas</h2>
+  <pre><span class="kw">विधि</span> <span class="fn">जोड़ो</span>(अ, ब):            <span class="cm"># function; फल = return</span>
+    <span class="kw">फल</span> अ + ब
+
+<span class="kw">विधि</span> <span class="fn">नमस्ते</span>(नाम=<span class="str">"दुनिया"</span>):    <span class="cm"># default parameter</span>
+    <span class="kw">फल</span> <span class="str">"नमस्ते "</span> + नाम
+
+<span class="kw">बताओ</span> <span class="fn">जोड़ो</span>(ब=4, अ=3)         <span class="cm"># keyword arguments</span></pre>
+  <div class="out"><b>Output:</b> 7</div>
+  <h3>Closures &amp; higher-order functions</h3>
+  <pre><span class="kw">विधि</span> <span class="fn">गुणक</span>(न):
+    <span class="kw">फल</span> <span class="kw">लाम्डा</span>(x): न * x    <span class="cm"># captures न</span>
+दोगुना <span class="kw">है</span> <span class="fn">गुणक</span>(2)
+<span class="kw">बताओ</span> दोगुना(7)
+<span class="kw">बताओ</span> <span class="fn">छानो</span>([1,2,3,4,5,6], <span class="kw">लाम्डा</span>(x): x % 2 <span class="kw">बराबर</span> 0)</pre>
+  <div class="out"><b>Output:</b> 14 &nbsp;/&nbsp; [2, 4, 6]</div>
+  <p><code>मानचित्र</code> (map), <code>छानो</code> (filter), <code>मोड़ो</code> (reduce), decorators, generators (<code>उत्पन्न</code>), and functools (<code>स्मरण</code>, <code>आंशिक</code>, <code>संयोजित</code>) are all built in.</p>
+</section>
+
+<!-- 6 COLLECTIONS -->
+<section class="page" id="coll">
+  <h2>6 · Lists &amp; dictionaries</h2>
+  <pre>अंक <span class="kw">है</span> [10, 20, 30]
+<span class="kw">बताओ</span> अंक[0]              <span class="cm"># 10</span>
+<span class="kw">बताओ</span> अंक[1:3]            <span class="cm"># slice → [20, 30]</span>
+<span class="kw">बताओ</span> अंक[::-1]           <span class="cm"># reverse</span>
+अंक <span class="kw">है</span> अंक.<span class="fn">जोड़ो</span>(40)     <span class="cm"># append (copy-on-write, reassign)</span>
+<span class="kw">बताओ</span> [x*x <span class="kw">के लिए</span> x अंक <span class="kw">में</span> <span class="kw">यदि</span> x <span class="kw">से अधिक</span> 15]   <span class="cm"># comprehension</span></pre>
+  <div class="out"><b>Output:</b> 10 / [20, 30] / [30, 20, 10] / [400, 900, 1600]</div>
+  <pre>व्यक्ति <span class="kw">है</span> {<span class="str">"नाम"</span>: <span class="str">"राम"</span>, <span class="str">"आयु"</span>: 25}
+<span class="kw">बताओ</span> व्यक्ति[<span class="str">"नाम"</span>]
+व्यक्ति[<span class="str">"शहर"</span>] <span class="kw">है</span> <span class="str">"दिल्ली"</span>
+<span class="kw">बताओ</span> व्यक्ति.<span class="fn">कुंजियाँ</span>()</pre>
+  <div class="out"><b>Output:</b> राम &nbsp;/&nbsp; ["आयु", "नाम", "शहर"]</div>
+</section>
+
+<!-- 7 OOP -->
+<section class="page" id="oop">
+  <h2>7 · Classes &amp; objects</h2>
+  <pre><span class="kw">वर्ग</span> व्यक्ति:
+    <span class="kw">विधि</span> <span class="fn">बनाओ</span>(नाम, आयु):     <span class="cm"># constructor</span>
+        यह.नाम <span class="kw">है</span> नाम
+        यह.आयु <span class="kw">है</span> आयु
+    <span class="kw">विधि</span> <span class="fn">परिचय</span>():
+        <span class="kw">बताओ</span> यह.नाम + <span class="str">", आयु "</span> + यह.आयु
+
+<span class="kw">वर्ग</span> छात्र(व्यक्ति):          <span class="cm"># inheritance</span>
+    <span class="kw">विधि</span> <span class="fn">बनाओ</span>(नाम, आयु, कक्षा):
+        यह.नाम <span class="kw">है</span> नाम
+        यह.आयु <span class="kw">है</span> आयु
+        यह.कक्षा <span class="kw">है</span> कक्षा
+
+प <span class="kw">है</span> व्यक्ति(<span class="str">"राम"</span>, 30)
+प.<span class="fn">परिचय</span>()</pre>
+  <div class="out"><b>Output:</b> राम, आयु 30</div>
+  <p>Also supported: static methods (<code>साझा विधि</code>), abstract classes (<code>सार वर्ग</code>), records (<code>अभिलेख</code>), properties (getters/setters), operator overloading, and context managers (<code>साथ … के_रूप_में</code>).</p>
+</section>
+
+<!-- 8 ERRORS -->
+<section class="page" id="err">
+  <h2>8 · Error handling</h2>
+  <pre><span class="kw">वर्ग</span> जाल_त्रुटि(त्रुटि):        <span class="cm"># typed exception, inherits त्रुटि</span>
+    <span class="kw">विधि</span> <span class="fn">बनाओ</span>(संदेश):
+        यह.संदेश <span class="kw">है</span> संदेश
+
+<span class="kw">कोशिश</span>:
+    <span class="kw">फेंको</span> जाल_त्रुटि(<span class="str">"विफल"</span>)     <span class="cm"># throw</span>
+<span class="kw">पकड़ो</span> जाल_त्रुटि ई:            <span class="cm"># typed clause (matches subclasses)</span>
+    <span class="kw">बताओ</span> <span class="str">"पकड़ा: "</span> + ई.संदेश
+<span class="kw">पकड़ो</span> त्रुटि:                  <span class="cm"># catch-all</span>
+    <span class="kw">बताओ</span> त्रुटि</pre>
+  <div class="out"><b>Output:</b> पकड़ा: विफल</div>
+  <p>Assertions use <code>जाँचो</code>; uncaught errors print a Hindi message with a line number and a call-stack trace.</p>
+</section>
+
+<!-- 9 STDLIB -->
+<section class="page" id="stdlib">
+  <h2>9 · The भारत standard library</h2>
+  <p>Import with <code>आयात भारत.&lt;मॉड्यूल&gt;</code>. A selection:</p>
+  <table>
+    <tr><th>Module</th><th>Provides</th></tr>
+    <tr><td>पहचान / भुगतान / संख्या</td><td>Aadhaar/PAN/IFSC validation · UPI · GST, EMI, lakh/crore/rupee formatting</td></tr>
+    <tr><td>गणित</td><td>Ancient-Indian math: sine (ज्या), Fibonacci (विरहांक), combinatorics</td></tr>
+    <tr><td>json / csv / प्रतिमान</td><td>JSON, CSV (RFC 4180), regex engine</td></tr>
+    <tr><td>समय / कूट / बड़ी</td><td>datetime (IST) · sha256/md5/base64 · arbitrary-precision integers</td></tr>
+    <tr><td>संजाल / सर्वर / सूत्र</td><td>TCP sockets · HTTP server · OS threads</td></tr>
+    <tr><td>संग्रह / संपीडन</td><td>in-memory SQL · ZIP read/write</td></tr>
+    <tr><td>मात्रक / रेखीय / नियंत्रण</td><td>units &amp; dimensional analysis · vectors/matrices/quaternions · PID + Kalman</td></tr>
+    <tr><td>दिशा / सुरक्षा / अंतराल</td><td>geodesy · Hamming ECC/CRC/TMR · interval arithmetic</td></tr>
+  </table>
+  <pre><span class="kw">आयात</span> भारत.बड़ी
+<span class="kw">बताओ</span> <span class="fn">महा_भाज्य</span>(<span class="str">"50"</span>)   <span class="cm"># 50! exactly</span>
+
+<span class="kw">आयात</span> भारत.मात्रक
+बल <span class="kw">है</span> <span class="fn">गुणा_मात्रा</span>(<span class="fn">मात्रा</span>(2, <span class="str">"किग्रा"</span>), <span class="fn">मात्रा</span>(9, <span class="str">"मीटर/सेकंड२"</span>))
+<span class="kw">बताओ</span> <span class="fn">मात्रा_वाक्य</span>(बल)</pre>
+  <div class="out"><b>Output:</b> 3041409320171337804361260816606476884437764156896051200…<br><b>&nbsp;</b> 18 न्यूटन</div>
+</section>
+
+<!-- 10 FORMATS -->
+<section class="page" id="formats">
+  <h2>10 · Config &amp; data formats</h2>
+  <p>Parsers for the common config/data formats return native LIPI values (Dicts, Lists).</p>
+  <h3>TOML / INI — भारत.टोमल</h3>
+  <pre><span class="kw">आयात</span> भारत.टोमल
+कोश <span class="kw">है</span> <span class="fn">toml_पढ़ो</span>(<span class="str">"[सर्वर]\nपोर्ट = 8080"</span>)
+<span class="kw">बताओ</span> कोश[<span class="str">"सर्वर"</span>][<span class="str">"पोर्ट"</span>]</pre>
+  <div class="out"><b>Output:</b> 8080</div>
+  <h3>YAML — भारत.यामल</h3>
+  <pre><span class="kw">आयात</span> भारत.यामल
+<span class="fn">यामल_पढ़ो</span>(<span class="str">"सेवा:\n  पोर्ट: 8080\n  टैग:\n    - तेज"</span>)</pre>
+  <div class="out"><b>Output:</b> {"सेवा": {"पोर्ट": 8080, "टैग": ["तेज"]}}</div>
+  <h3>XML / HTML — भारत.एक्सएमएल</h3>
+  <pre><span class="kw">आयात</span> भारत.एक्सएमएल
+ए <span class="kw">है</span> <span class="fn">xml_पढ़ो</span>(<span class="str">"&lt;पुस्तक id='1'&gt;&lt;शीर्षक&gt;गणित&lt;/शीर्षक&gt;&lt;/पुस्तक&gt;"</span>)
+<span class="kw">बताओ</span> ए[<span class="str">"बच्चे"</span>][0][<span class="str">"पाठ"</span>]</pre>
+  <div class="out"><b>Output:</b> गणित</div>
+  <h3>Command-line arguments — भारत.तर्कपार्स</h3>
+  <pre><span class="kw">आयात</span> भारत.तर्कपार्स
+<span class="fn">तर्क_पार्स</span>([<span class="str">"build"</span>, <span class="str">"--out=dist"</span>, <span class="str">"--fast"</span>])</pre>
+  <div class="out"><b>Output:</b> {"out": "dist", "fast": सत्य, "_स्थिति": ["build"]}</div>
+</section>
+
+<!-- 11 NO-LIMITS -->
+<section class="page" id="nolimit">
+  <h2>11 · FFI, hardware &amp; HTTPS — the no-limits tier</h2>
+  <p>When the stdlib isn't enough, LIPI reaches native code and the network directly.</p>
+  <h3>C FFI — भारत.बाह्य</h3>
+  <p>Call any C-ABI function in any shared library. Cross-platform (LoadLibrary on Windows, dlopen on Linux/macOS). You can even hand a LIPI function back <em>as</em> a C callback — here C's <code>qsort</code> sorts using a LIPI comparator:</p>
+  <pre><span class="kw">आयात</span> भारत.बाह्य
+पुस्तकालय <span class="kw">है</span> <span class="fn">बाह्य_पुस्तकालय</span>(<span class="str">"msvcrt.dll"</span>)
+सीएमपी <span class="kw">है</span> <span class="fn">बाह्य_कॉलबैक</span>(तुलना, <span class="str">"ll:i"</span>)
+<span class="fn">बाह्य_बुलाओ</span>(पुस्तकालय, <span class="str">"qsort"</span>, <span class="str">"llll:v"</span>, आधार, 5, 4, सीएमपी)</pre>
+  <div class="out"><b>[5,2,8,1,9] →</b> [1, 2, 5, 8, 9] &nbsp;<span class="cm">(C called LIPI back)</span></div>
+  <h3>Raw memory &amp; MMIO — भारत.तंत्र</h3>
+  <p>Bounds-checked buffers to build C structs, plus volatile <code>कच्चा_पढ़ो/लिखो</code> for memory-mapped hardware registers.</p>
+  <h3>HTTPS / TLS — भारत.सुरक्षित</h3>
+  <pre><span class="kw">आयात</span> भारत.सुरक्षित
+प <span class="kw">है</span> <span class="fn">https_पाओ</span>(<span class="str">"https://api.github.com/zen"</span>, {<span class="str">"User-Agent"</span>:<span class="str">"LIPI"</span>})
+<span class="kw">बताओ</span> प[<span class="str">"स्थिति"</span>]</pre>
+  <div class="out"><b>Output:</b> 200</div>
+  <div class="note">With real HTTPS, LIPI can call LLM APIs, payment gateways, and cloud services. See <code>examples/llm_client.swami</code> for a Claude Messages-API wrapper.</div>
+</section>
+
+<!-- 12 TOOLING -->
+<section class="page" id="tools">
+  <h2>12 · Tooling</h2>
+  <table>
+    <tr><th>Tool</th><th>Command</th></tr>
+    <tr><td>Test framework</td><td><code>lipi test</code> — runs <code>परीक्षण</code> blocks in isolated VMs</td></tr>
+    <tr><td>Formatter</td><td><code>lipi fmt</code> — behavior-preserving, idempotent</td></tr>
+    <tr><td>Linter</td><td><code>lipi lint</code> — unused/undefined variables</td></tr>
+    <tr><td>Type checker</td><td><code>lipi check</code> — optional gradual type hints</td></tr>
+    <tr><td>Doc generator</td><td><code>lipi doc</code> — Markdown from signatures + comments</td></tr>
+    <tr><td>Profiler</td><td><code>lipi profile</code> — opcode/function report (+ SVG flame graph)</td></tr>
+    <tr><td>Debugger</td><td><code>lipi debug</code> — line breakpoints, step, inspect</td></tr>
+    <tr><td>Language server</td><td><code>lipi lsp</code> — diagnostics, hover, completion (Neovim/VSCode)</td></tr>
+    <tr><td>Package manager</td><td><code>lipi pkg</code> — <code>lipi.toml</code> + git-native install</td></tr>
+    <tr><td>Browser IDE</td><td><code>lipi ide</code> — Monaco-based LIPI Studio</td></tr>
+  </table>
+  <h3>A test block</h3>
+  <pre><span class="kw">परीक्षण</span> <span class="str">"जोड़ो सही है"</span>:
+    <span class="kw">जाँचो</span> <span class="fn">जोड़ो</span>(2, 3) <span class="kw">बराबर</span> 5, <span class="str">"जोड़ गलत"</span></pre>
+</section>
+
+<!-- 13 TUTORIAL (Hindi) -->
+<section class="page" id="tutorial">
+  <h2>13 · परिचय — एक हिंदी ट्यूटोरियल</h2>
+  <p>यह खंड पूरी तरह हिंदी में है — बिना किसी पूर्व अनुभव के LIPI सीखने के लिए।</p>
+  <h3>पाठ १ — पहला कार्यक्रम</h3>
+  <p><code>बताओ</code> का अर्थ है "स्क्रीन पर दिखाओ"। इसे चलाओ:</p>
+  <pre><span class="kw">बताओ</span> <span class="str">"मेरा पहला कार्यक्रम"</span></pre>
+  <div class="out"><b>परिणाम:</b> मेरा पहला कार्यक्रम</div>
+  <h3>पाठ २ — चर (variables)</h3>
+  <p><code>है</code> का अर्थ है "मान रखो"। किसी नाम में संख्या या शब्द रखा जा सकता है।</p>
+  <pre>आयु <span class="kw">है</span> 25
+नाम <span class="kw">है</span> <span class="str">"सीता"</span>
+<span class="kw">बताओ</span> नाम + <span class="str">" की आयु "</span> + आयु</pre>
+  <div class="out"><b>परिणाम:</b> सीता की आयु 25</div>
+  <h3>पाठ ३ — निर्णय (if/else)</h3>
+  <pre>अंक <span class="kw">है</span> 72
+<span class="kw">यदि</span> अंक <span class="kw">से अधिक</span> 33:
+    <span class="kw">बताओ</span> <span class="str">"उत्तीर्ण"</span>
+<span class="kw">अन्यथा</span>:
+    <span class="kw">बताओ</span> <span class="str">"अनुत्तीर्ण"</span></pre>
+  <div class="out"><b>परिणाम:</b> उत्तीर्ण</div>
+  <h3>पाठ ४ — दोहराव (loops)</h3>
+  <pre>i <span class="kw">के लिए</span> 5 <span class="kw">में</span>:
+    <span class="kw">बताओ</span> i * i</pre>
+  <div class="out"><b>परिणाम:</b> 0 &nbsp; 1 &nbsp; 4 &nbsp; 9 &nbsp; 16</div>
+  <h3>पाठ ५ — विधि (function)</h3>
+  <pre><span class="kw">विधि</span> <span class="fn">बड़ा</span>(अ, ब):
+    <span class="kw">यदि</span> अ <span class="kw">से अधिक</span> ब:
+        <span class="kw">फल</span> अ
+    <span class="kw">फल</span> ब
+<span class="kw">बताओ</span> <span class="fn">बड़ा</span>(12, 7)</pre>
+  <div class="out"><b>परिणाम:</b> 12</div>
+  <h3>अभ्यास</h3>
+  <p>एक विधि <code>जीएसटी</code> बनाओ जो राशि लेकर 18% कर जोड़कर लौटाए। संकेत: <code>फल राशि + राशि * 18 // 100</code>।</p>
+</section>
+
+<!-- 14 CHEAT SHEET -->
+<section class="page" id="cheat">
+  <h2>14 · Quick reference</h2>
+  <table>
+    <tr><th>Concept</th><th>Keyword</th><th>Concept</th><th>Keyword</th></tr>
+    <tr><td>print / inline</td><td>बताओ / लिखो</td><td>assign</td><td>है</td></tr>
+    <tr><td>if / elif / else</td><td>यदि / अन्यथा यदि / अन्यथा</td><td>ternary</td><td>… तो … अन्यथा</td></tr>
+    <tr><td>for / while</td><td>के लिए … में / जब तक</td><td>repeat N</td><td>N बार करो</td></tr>
+    <tr><td>break / continue</td><td>बंद करो / अगला</td><td>function / return</td><td>विधि / फल</td></tr>
+    <tr><td>lambda</td><td>लाम्डा</td><td>class / self</td><td>वर्ग / यह</td></tr>
+    <tr><td>try / catch / throw</td><td>कोशिश / पकड़ो / फेंको</td><td>assert</td><td>जाँचो</td></tr>
+    <tr><td>and / or / not</td><td>और / या / नहीं</td><td>import</td><td>आयात</td></tr>
+    <tr><td>true / false / nil</td><td>सत्य / असत्य / शून्य</td><td>global / const</td><td>वैश्विक / स्थिर</td></tr>
+    <tr><td>yield</td><td>उत्पन्न</td><td>match</td><td>मिलाओ</td></tr>
+  </table>
+  <h3>Constraints to remember</h3>
+  <ul>
+    <li><code>फल</code> (return), <code>है</code> (assign), and <code>वर्ग</code> (class) are keywords — not usable as names.</li>
+    <li>Lists/dicts are copy-on-write: mutating methods return a new value — reassign it.</li>
+    <li>Comments are single-line: <code>। … ।</code> or <code>#</code>. No hex literals.</li>
+  </ul>
+  <div class="note">This handbook is generated from LIPI's own documentation. Every example was run on the reference implementation; outputs are real. Source: the LIPI repository, <code>docs/handbook/</code>.</div>
+</section>
+
+</body></html>
