@@ -1,0 +1,53 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #0f1419; font-size: 12pt; }
+  h1 { font-size: 18pt; margin: 0 0 6mm; }
+  .tweet { border: 1px solid #cfd9de; border-radius: 12px; padding: 4mm 5mm; margin: 0 0 5mm; }
+  .n { color: #536471; font-size: 10pt; margin-bottom: 1.5mm; }
+  pre { font-family: Consolas, "Courier New", monospace; background: #0f1117; color: #e6e6e6;
+        padding: 3mm 4mm; border-radius: 8px; font-size: 10.5pt; white-space: pre-wrap; margin: 2mm 0 0; }
+  .out { color: #00754a; font-family: Consolas, monospace; font-size: 10.5pt; margin-top: 2mm; }
+  .out b { color: #00a86b; }
+  p { margin: 0; }
+</style></head><body>
+  <h1>🧵 LIPI — a Devanagari-syntax language, in pure Rust</h1>
+
+  <div class="tweet"><div class="n">1/6</div>
+    <p>LIPI lets you program with Hindi/Sanskrit keywords. It's not a toy — source compiles to a bytecode VM (LVM) and also runs in the browser via WebAssembly. Hello world:</p>
+    <pre>बताओ "नमस्ते दुनिया"</pre>
+    <div class="out"><b>→</b> नमस्ते दुनिया</div>
+  </div>
+
+  <div class="tweet"><div class="n">2/6</div>
+    <p>Functions, classes, closures, generators, pattern matching, decorators — the full toolkit. Higher-order functions too:</p>
+    <pre>बताओ छानो([1,2,3,4,5,6], लाम्डा(x): x % 2 बराबर 0)</pre>
+    <div class="out"><b>→</b> [2, 4, 6]</div>
+  </div>
+
+  <div class="tweet"><div class="n">3/6</div>
+    <p>Exact math when you need it — arbitrary-precision integers, no float error:</p>
+    <pre>आयात भारत.बड़ी
+बताओ महा_भाज्य("30")   # 30!</pre>
+    <div class="out"><b>→</b> 265252859812191058636308480000000</div>
+  </div>
+
+  <div class="tweet"><div class="n">4/6</div>
+    <p>No ceiling: a C FFI. Call any native library — and pass a LIPI function as a C callback. C's qsort, sorted by a LIPI comparator:</p>
+    <pre># qsort([5,2,8,1,9], LIPI comparator)</pre>
+    <div class="out"><b>→</b> [1, 2, 5, 8, 9]</div>
+  </div>
+
+  <div class="tweet"><div class="n">5/6</div>
+    <p>Real HTTPS — so it talks to modern APIs and LLMs:</p>
+    <pre>आयात भारत.सुरक्षित
+बताओ https_पाओ("https://api.github.com/zen",
+              {"User-Agent":"LIPI"})["स्थिति"]</pre>
+    <div class="out"><b>→</b> 200</div>
+  </div>
+
+  <div class="tweet"><div class="n">6/6</div>
+    <p>Also in the box: JSON, CSV, regex, SQL, ZIP, sockets, threads, an HTTP server, units + linear algebra + Kalman control, a browser IDE, formatter, linter, profiler, debugger, LSP, package manager. Open source, 60+ passing examples. Contributors welcome.</p>
+  </div>
+</body></html>
