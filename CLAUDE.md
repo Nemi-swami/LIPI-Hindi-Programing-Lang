@@ -88,6 +88,7 @@ lipi foo.vani             # auto-detected by extension
 | `src/ffi.rs` | `भारत.बाह्य` — C FFI: call any native DLL via LoadLibrary/GetProcAddress (Phase 19 F1) |
 | `src/tantra.rs` | `भारत.तंत्र` — raw memory buffers + volatile MMIO register access (Phase 19 F2) |
 | `src/cbthunk.rs` | FFI callbacks — `बाह्य_कॉलबैक` passes a LIPI closure as a C function pointer (Phase 19 F3) |
+| `src/jit.rs` | Native x86-64 JIT — compiles `फल`-of-arithmetic functions to machine code (Phase 19 F11) |
 | `src/https.rs` | `भारत.सुरक्षित` — HTTPS/TLS client: WinHTTP on Windows, curl on Unix (enables LLM APIs) (Phase 19 F4) |
 | `src/lognaad.rs` | `भारत.लॉग` — level-filtered logging to stderr (Phase 19 F5) |
 | `src/tomlparse.rs` | `भारत.टोमल` — TOML + INI config parsers → nested Dict (Phase 19 F6) |

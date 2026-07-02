@@ -29,6 +29,7 @@ mod yaml;
 mod xmlparse;
 mod argparse;
 mod daak;
+mod jit;
 mod opcode;
 mod compiler;
 mod lvm;
@@ -55,6 +56,7 @@ fn run(source: &str) {
         Ok(stmts) => {
             let program = compiler::Compiler::compile_program(&stmts);
             let mut vm = lvm::LVM::new();
+            vm.set_jit(jit::compile_program(&stmts));
             if let Err(e) = vm.run(&program) {
                 eprintln!("LVM त्रुटि: {e}");
                 show_error_line(source, &e);

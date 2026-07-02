@@ -28,6 +28,7 @@ mod yaml;
 mod xmlparse;
 mod argparse;
 mod daak;
+mod jit;
 mod opcode;
 mod compiler;
 mod lvm;

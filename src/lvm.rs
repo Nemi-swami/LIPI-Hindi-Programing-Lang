@@ -99,6 +99,9 @@ pub struct LVM {
     /// When `capture` is true, Print writes here instead of stdout.
     pub output: String,
     capture: bool,
+    /// JIT-compiled native fast paths for qualifying arithmetic functions.
+    #[cfg(not(target_arch = "wasm32"))]
+    jit_fns: HashMap<String, crate::jit::JitFn>,
 }
 
 impl LVM {
@@ -121,6 +124,8 @@ impl LVM {
             yielded: false,
             output: String::new(),
             capture: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            jit_fns: HashMap::new(),
         };
         // Pre-register built-in functions always available without आयात
         vm.native_fns.insert("लम्बाई".into(), builtin_lambai);
@@ -214,6 +219,12 @@ impl LVM {
         let mut vm = Self::new();
         vm.capture = true;
         vm
+    }
+
+    /// Install JIT-compiled native fast paths (used by the direct-run CLI path).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_jit(&mut self, m: HashMap<String, crate::jit::JitFn>) {
+        self.jit_fns = m;
     }
 
     /// Push a call frame, guarding against runaway recursion (Phase 17C).
@@ -1024,6 +1035,22 @@ impl LVM {
                     let mut args = Vec::with_capacity(argc);
                     for _ in 0..argc { args.push(pop(&mut self.stack)?); }
                     args.reverse();
+
+                    // JIT fast path: qualifying arithmetic functions run as native code.
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let hit = self.jit_fns.get(name).map(|jf| (jf.ptr(), jf.arity));
+                        if let Some((ptr, arity)) = hit {
+                            if argc == arity && args.iter().all(|a| matches!(a, Value::Number(_))) {
+                                let fargs: Vec<f64> = args.iter()
+                                    .map(|a| if let Value::Number(n) = a { *n } else { 0.0 })
+                                    .collect();
+                                let r = unsafe { crate::jit::call_raw(ptr, &fargs) };
+                                self.stack.push(Value::Number(r));
+                                return Ok(false);
+                            }
+                        }
+                    }
 
                     if let Some(func) = self.functions.get(name).cloned() {
                         let mut locals = HashMap::new();

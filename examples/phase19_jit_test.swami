@@ -1,0 +1,22 @@
+# JIT-able: single फल of + - * arithmetic → runs as native machine code
+विधि वर्ग_योग(अ, ब):
+    फल अ * अ + ब * ब
+
+विधि रैखिक(x):
+    फल x * 3 - 7
+
+# NOT JIT-able (division) → interpreter fallback, must still be correct
+विधि भाग(अ, ब):
+    फल अ / ब
+
+जाँचो वर्ग_योग(3, 4) बराबर 25, "jit1"
+जाँचो वर्ग_योग(5, 12) बराबर 169, "jit2"
+जाँचो रैखिक(10) बराबर 23, "jit3"
+जाँचो भाग(20, 4) बराबर 5, "fallback div"
+
+# hammer the native path in a loop; sum must match interpreter math
+कुल है 0
+i के लिए 100 में:
+    कुल है कुल + वर्ग_योग(i, 1)
+जाँचो कुल बराबर 328450, "jit loop"
+बताओ "JIT परीक्षण पास ✓ (मूल native कोड चला)"
