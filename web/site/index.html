@@ -192,36 +192,26 @@
   <h2>Install</h2>
   <p class="hint">Pick your platform.</p>
   <div class="tabs">
-    <button class="on" data-t="unix">Terminal (Linux)</button>
-    <button data-t="mac">macOS</button>
-    <button data-t="win">Windows (.exe)</button>
-    <button data-t="src">From source</button>
+    <button class="on" data-t="src">From source</button>
+    <button data-t="unix">Linux / macOS</button>
+    <button data-t="win">Windows</button>
   </div>
 
-  <div class="pane on" data-p="unix">
-    <pre>curl -fsSL https://raw.githubusercontent.com/&lt;you&gt;/lipi-lang/main/install.sh | sh</pre>
-    <p class="note">Builds from source with Cargo and installs <code>lipi</code> to <code>~/.local/bin</code>. Requires Rust (rustup.rs) and git.</p>
-  </div>
-  <div class="pane" data-p="mac">
-    <pre>brew install &lt;you&gt;/tap/lipi
-# or:
-curl -fsSL https://raw.githubusercontent.com/&lt;you&gt;/lipi-lang/main/install.sh | sh</pre>
-    <p class="note">The Homebrew formula (packaging/homebrew/lipi.rb) builds from source. The install script works on both Linux and macOS.</p>
-  </div>
-  <div class="pane" data-p="win">
-    <pre># PowerShell one-liner:
-irm https://raw.githubusercontent.com/&lt;you&gt;/lipi-lang/main/install.ps1 | iex
-
-# or with winget (once published):
-winget install LIPI.LIPI</pre>
-    <p class="note">Or download <code>lipi.exe</code> from Releases and run <code>install.bat</code>. Prebuilt binary — no build step.</p>
-  </div>
-  <div class="pane" data-p="src">
-    <pre>git clone https://github.com/&lt;you&gt;/lipi-lang
-cd lipi-lang
+  <div class="pane on" data-p="src">
+    <pre>git clone https://github.com/Nemi-swami/LIPI-Hindi-Programing-LAng
+cd LIPI-Hindi-Programing-LAng
 cargo build --release
 # binary: target/release/lipi</pre>
-    <p class="note">Pure Rust, no external crates. Builds on Windows, Linux, and macOS.</p>
+    <p class="note">Pure Rust, no external crates. Builds on Windows, Linux, and macOS. Requires Rust (rustup.rs).</p>
+  </div>
+  <div class="pane" data-p="unix">
+    <pre>curl -fsSL https://raw.githubusercontent.com/Nemi-swami/LIPI-Hindi-Programing-LAng/main/install.sh | sh</pre>
+    <p class="note">Builds from source with Cargo and installs <code>lipi</code> to <code>~/.local/bin</code>. Requires Rust and git.</p>
+  </div>
+  <div class="pane" data-p="win">
+    <pre># PowerShell:
+irm https://raw.githubusercontent.com/Nemi-swami/LIPI-Hindi-Programing-LAng/main/install.ps1 | iex</pre>
+    <p class="note">Or download <code>LIPI-Setup.exe</code> from the <a href="https://github.com/Nemi-swami/LIPI-Hindi-Programing-LAng/releases">Releases</a> page and run it.</p>
   </div>
 </div></section>
 
@@ -287,15 +277,18 @@ cargo build --release
   runBtn.addEventListener('click', run);
 
   init().then(()=>{ runBtn.disabled=false; stEl.textContent='ready'; })
-        .catch(e=>{ stEl.textContent='runtime failed to load'; });
+        .catch(e=>{ stEl.textContent='open via a web server to run in-browser'; });
+</script>
 
-  // install tabs
-  document.querySelectorAll('.tabs button').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
-      document.querySelectorAll('.install .pane').forEach(x=>x.classList.remove('on'));
+<!-- Plain script: install tabs must work regardless of whether the WASM runtime loads. -->
+<script>
+  document.querySelectorAll('.tabs button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.tabs button').forEach(function(x){ x.classList.remove('on'); });
+      document.querySelectorAll('.install .pane').forEach(function(x){ x.classList.remove('on'); });
       b.classList.add('on');
-      document.querySelector('.pane[data-p="'+b.dataset.t+'"]').classList.add('on');
+      var pane = document.querySelector('.pane[data-p="'+b.dataset.t+'"]');
+      if (pane) pane.classList.add('on');
     });
   });
 </script>
