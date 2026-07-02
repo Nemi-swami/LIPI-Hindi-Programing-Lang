@@ -10,8 +10,11 @@
 //!   जोड़_मात्रा / घटा_मात्रा  → add/subtract (same dimension required)
 //!   गुणा_मात्रा / भाग_मात्रा  → multiply/divide (dimensions combine)
 //!   मान_में(q, "इकाई")       → numeric value in a given unit
-//!   मात्रा_वाक्य(q)          → "5 मीटर", "9.81 मीटर/सेकंड²"
+//!   मात्रा_वाक्य(q)          → "5 मीटर", "18 न्यूटन", "9.81 मीटर/सेकंड²"
 //!   विमा_बराबर(a, b)        → same dimensions? (Bool)
+//!
+//! Affine temperature units सेल्सियस/°C and फ़ारेनहाइट/°F convert with an
+//! offset (stored as Kelvin); all other units are pure scale factors.
 
 use crate::bharat_stdlib::{NativeFn, Registry};
 use crate::interpreter::Value;
@@ -57,7 +60,7 @@ fn unit_lookup(name: &str) -> Option<(f64, Dim)> {
         "मिनट" => (60.0, t),
         "घंटा" => (3600.0, t),
         "दिन" => (86400.0, t),
-        // current / temperature
+        // current / temperature (सेल्सियस/फ़ारेनहाइट are affine — see unit_lookup_full)
         "एम्पियर" | "A" => (1.0, i),
         "केल्विन" | "K" => (1.0, th),
         // force — पाउंड_बल is the Mars Climate Orbiter culprit
@@ -85,7 +88,33 @@ fn unit_lookup(name: &str) -> Option<(f64, Dim)> {
     })
 }
 
+/// Affine units: SI = value * scale + offset. Needed for temperatures, where
+/// 0 °C ≠ 0 K — a plain factor can't represent the shift.
+fn unit_lookup_full(name: &str) -> Option<(f64, f64, Dim)> {
+    let th: Dim = [0, 0, 0, 0, 1, 0, 0];
+    match name {
+        "सेल्सियस" | "°C" => Some((1.0, 273.15, th)),
+        "फ़ारेनहाइट" | "फारेनहाइट" | "°F" => Some((5.0 / 9.0, 273.15 - 32.0 * 5.0 / 9.0, th)),
+        _ => unit_lookup(name).map(|(f, d)| (f, 0.0, d)),
+    }
+}
+
+/// Recognizable SI derived-unit names for display — "18 न्यूटन" reads better
+/// than "18 मीटर·किग्रा/सेकंड²".
+fn derived_name(d: &Dim) -> Option<&'static str> {
+    match *d {
+        [1, 1, -2, 0, 0, 0, 0] => Some("न्यूटन"),
+        [2, 1, -2, 0, 0, 0, 0] => Some("जूल"),
+        [2, 1, -3, 0, 0, 0, 0] => Some("वाट"),
+        [-1, 1, -2, 0, 0, 0, 0] => Some("पास्कल"),
+        _ => None,
+    }
+}
+
 fn dim_to_string(d: &Dim) -> String {
+    if let Some(n) = derived_name(d) {
+        return n.to_string();
+    }
     let mut num: Vec<String> = Vec::new();
     let mut den: Vec<String> = Vec::new();
     let sup = |e: i32| -> String {
@@ -136,8 +165,8 @@ fn parse_qty(v: &Value, fname: &str) -> Result<(f64, Dim), String> {
 fn matra(args: Vec<Value>) -> Result<Value, String> {
     let val = match args.first() { Some(Value::Number(n)) => *n, _ => return Err("मात्रा(): पहला तर्क संख्या होना चाहिए".to_string()) };
     let unit = match args.get(1) { Some(Value::Str(s)) => s.clone(), _ => return Err("मात्रा(): दूसरा तर्क इकाई (वाक्य) होना चाहिए".to_string()) };
-    let (factor, dim) = unit_lookup(&unit).ok_or_else(|| format!("मात्रा(): अज्ञात इकाई '{unit}'"))?;
-    Ok(make_qty(val * factor, dim))
+    let (factor, offset, dim) = unit_lookup_full(&unit).ok_or_else(|| format!("मात्रा(): अज्ञात इकाई '{unit}'"))?;
+    Ok(make_qty(val * factor + offset, dim))
 }
 
 fn jod_matra(args: Vec<Value>) -> Result<Value, String> {
@@ -174,9 +203,9 @@ fn bhag_matra(args: Vec<Value>) -> Result<Value, String> {
 fn maan_mein(args: Vec<Value>) -> Result<Value, String> {
     let (val, dim) = parse_qty(args.first().unwrap_or(&Value::Nil), "मान_में")?;
     let unit = match args.get(1) { Some(Value::Str(s)) => s.clone(), _ => return Err("मान_में(): इकाई (वाक्य) अपेक्षित".to_string()) };
-    let (factor, udim) = unit_lookup(&unit).ok_or_else(|| format!("मान_में(): अज्ञात इकाई '{unit}'"))?;
+    let (factor, offset, udim) = unit_lookup_full(&unit).ok_or_else(|| format!("मान_में(): अज्ञात इकाई '{unit}'"))?;
     if udim != dim { return Err(format!("मान_में(): विमा बेमेल — मात्रा {} है, इकाई '{}' {}", dim_to_string(&dim), unit, dim_to_string(&udim))); }
-    Ok(Value::Number(val / factor))
+    Ok(Value::Number((val - offset) / factor))
 }
 
 fn fmt_num(n: f64) -> String {

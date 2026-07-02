@@ -6,9 +6,9 @@ set PATH=D:\Rust\cargo\bin;D:\msys64\mingw64\bin;%PATH%
 cd /d D:\Projects\lipi-lang
 
 echo.
-echo  LIPI — Building...
+echo  LIPI — Building (release)...
 echo  ══════════════════════════════════════
-cargo build --target x86_64-pc-windows-gnu
+cargo build --release --target x86_64-pc-windows-gnu
 if errorlevel 1 (
     echo.
     echo  [ERROR] Build failed!
@@ -18,7 +18,7 @@ if errorlevel 1 (
 
 echo.
 echo  Installing lipi.exe to D:\Rust\cargo\bin\
-copy /Y "target\x86_64-pc-windows-gnu\debug\lipi.exe" "D:\Rust\cargo\bin\lipi.exe" >nul
+copy /Y "target\x86_64-pc-windows-gnu\release\lipi.exe" "D:\Rust\cargo\bin\lipi.exe" >nul
 
 echo.
 echo  Done! You can now use from anywhere:
