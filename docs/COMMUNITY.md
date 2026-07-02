@@ -151,6 +151,25 @@ systems programming. It gives you:
 `कच्चा_*` is unchecked by design — a bad address crashes the process, just like C.
 That is the price of unrestricted hardware access.
 
+### Callbacks — when the library calls YOU (`बाह्य_कॉलबैक`)
+
+Many C APIs are callback-driven: `qsort` wants a comparator, a GUI toolkit wants an
+event handler, a driver wants a completion routine. `बाह्य_कॉलबैक(क्लोजर, "ll:i")`
+turns a LIPI closure into a real C function pointer you can pass into such APIs.
+When the native code invokes it, LIPI runs your closure and returns its result to C.
+
+```lipi
+विधि तुलना(अ, ब):                       # अ, ब are C pointers to the two elements
+    फल कच्चा_पढ़ो३२(अ) - कच्चा_पढ़ो३२(ब)
+सीएमपी है बाह्य_कॉलबैक(तुलना, "ll:i")     # → a C function pointer
+बाह्य_बुलाओ(lib, "qsort", "llll:v", आधार, गिनती, 4, सीएमपी)
+बाह्य_कॉलबैक_मुक्त(सीएमपी)               # free the slot when C is done with it
+```
+
+Limits: callback arguments are integer/pointer only (`i`/`l`), at most 4 (covers
+comparators, window procs, interrupt handlers); use `भारत.तंत्र` to read any struct
+the pointers refer to. A callback that errors returns 0 to C.
+
 ### Why this reaches every domain
 
 | Domain | Existing C libraries LIPI can now drive via `भारत.बाह्य` |

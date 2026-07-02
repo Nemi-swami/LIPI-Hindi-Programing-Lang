@@ -65,12 +65,12 @@ games, kiosks, instrument panels.
 1. Author a Tier-2 addon package `lipi-gui` (per `docs/COMMUNITY.md`) wrapping the
    chosen DLL so app authors never see `बाह्य_बुलाओ`.
 2. Provide a `विंडो`/`बटन`/`घटना` (window/button/event) LIPI API on top.
-3. **Prerequisite core work:** FFI **callbacks** — the ability to pass a LIPI
-   closure as a C function pointer (for window procs / event callbacks). This is
-   the one genuinely new interpreter feature GUI needs. Design: a trampoline that
-   marshals C args → `Value`s, invokes the closure, marshals the result back.
+3. ~~**Prerequisite core work:** FFI callbacks~~ — **DONE** (Phase 19 F3,
+   `src/cbthunk.rs`). `बाह्य_कॉलबैक(closure, "ll:i")` returns a C function pointer
+   backed by a LIPI closure (int/ptr args, ≤4), proven with C `qsort`. Window procs
+   and event callbacks can now be LIPI closures.
 
-**Effort:** B1 = M, B2 = L. **Blocked on:** FFI callbacks (a focused core add).
+**Effort:** B1 = M, B2 = L. **No longer blocked** — the callback primitive exists.
 
 ---
 

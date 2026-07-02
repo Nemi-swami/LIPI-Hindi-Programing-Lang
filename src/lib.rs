@@ -20,6 +20,7 @@ mod suraksha;
 mod antaral;
 mod ffi;
 mod tantra;
+mod cbthunk;
 mod opcode;
 mod compiler;
 mod lvm;

@@ -1,0 +1,49 @@
+# Phase 19 F3 — FFI callbacks: a LIPI closure driven BY native C code.
+# We hand a LIPI comparator to C's qsort() and let qsort call back into LIPI
+# for every comparison. Proves the callback trampoline round-trips correctly.
+आयात भारत.बाह्य
+आयात भारत.तंत्र
+
+# Comparator: qsort passes POINTERS to two 4-byte ints. Read them raw, return sign.
+विधि तुलना(अ, ब):
+    क है कच्चा_पढ़ो३२(अ)
+    ख है कच्चा_पढ़ो३२(ब)
+    यदि क से कम ख:
+        फल -1
+    यदि क बराबर ख:
+        फल 0
+    फल 1
+
+बताओ "== 1. build an unsorted int array in raw memory =="
+आधार है स्मृति_आवंटन(20)            # 5 × 4-byte ints
+मूल है [5, 2, 8, 1, 9]
+i के लिए 5 में:
+    कच्चा_लिखो३२(आधार + i * 4, मूल[i])
+लिखो "पहले: "
+बताओ [कच्चा_पढ़ो३२(आधार + 0), कच्चा_पढ़ो३२(आधार + 4), कच्चा_पढ़ो३२(आधार + 8), कच्चा_पढ़ो३२(आधार + 12), कच्चा_पढ़ो३२(आधार + 16)]
+
+बताओ "== 2. register the LIPI comparator as a C function pointer =="
+कॉलबैक है बाह्य_कॉलबैक(तुलना, "ll:i")
+जाँचो कॉलबैक से अधिक 0, "कॉलबैक पता अमान्य"
+
+बताओ "== 3. call C qsort(base, 5, 4, callback) =="
+पुस्तकालय है बाह्य_पुस्तकालय("msvcrt.dll")
+बाह्य_बुलाओ(पुस्तकालय, "qsort", "llll:v", आधार, 5, 4, कॉलबैक)
+
+बताओ "== 4. verify C sorted our array using the LIPI callback =="
+प है [कच्चा_पढ़ो३२(आधार + 0), कच्चा_पढ़ो३२(आधार + 4), कच्चा_पढ़ो३२(आधार + 8), कच्चा_पढ़ो३२(आधार + 12), कच्चा_पढ़ो३२(आधार + 16)]
+लिखो "बाद में: "
+बताओ प
+जाँचो प[0] बराबर 1, "sort गलत @0"
+जाँचो प[1] बराबर 2, "sort गलत @1"
+जाँचो प[2] बराबर 5, "sort गलत @2"
+जाँचो प[3] बराबर 8, "sort गलत @3"
+जाँचो प[4] बराबर 9, "sort गलत @4"
+
+बताओ "== 5. cleanup =="
+जाँचो बाह्य_कॉलबैक_मुक्त(कॉलबैक), "कॉलबैक मुक्त विफल"
+बाह्य_बंद(पुस्तकालय)
+स्मृति_मुक्त(आधार)
+
+बताओ ""
+बताओ "सब परीक्षण पास ✓ — C ने LIPI को कॉल किया!"

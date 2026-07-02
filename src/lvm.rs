@@ -1077,6 +1077,31 @@ impl LVM {
                         let instance = args.into_iter().next().unwrap_or(Value::Nil);
                         self.stack.push(instance);
                     }
+                    // FFI callback: register a closure as a C function pointer.
+                    // Special-cased here (not a plain native) because it needs the
+                    // live &mut self + program instructions.
+                    else if name == "बाह्य_कॉलबैक" && argc == 2 {
+                        let closure = args[0].clone();
+                        let spec = match &args[1] {
+                            Value::Str(s) => s.clone(),
+                            _ => return Err("बाह्य_कॉलबैक(): दूसरा तर्क ढांचा (वाक्य) होना चाहिए, जैसे \"ll:i\"".to_string()),
+                        };
+                        let arg_part = spec.split(':').next().unwrap_or("");
+                        if !arg_part.chars().all(|c| c == 'i' || c == 'l') {
+                            return Err("बाह्य_कॉलबैक(): कॉलबैक तर्क केवल पूर्णांक/सूचक (i/l) हो सकते हैं".to_string());
+                        }
+                        let cb_argc = arg_part.chars().count();
+                        let vm_ptr = self as *mut LVM;
+                        let addr = crate::cbthunk::register(closure, cb_argc, vm_ptr, instructions)?;
+                        self.stack.push(Value::Number(addr as f64));
+                    }
+                    else if name == "बाह्य_कॉलबैक_मुक्त" && argc == 1 {
+                        let addr = match &args[0] {
+                            Value::Number(n) => *n as usize,
+                            _ => return Err("बाह्य_कॉलबैक_मुक्त(): पता (संख्या) अपेक्षित".to_string()),
+                        };
+                        self.stack.push(Value::Bool(crate::cbthunk::unregister(addr)));
+                    }
                     // Native function (built-in or imported)
                     else if let Some(native) = self.native_fns.get(name).copied() {
                         let result = native(args)?;
@@ -2148,7 +2173,7 @@ impl LVM {
     /// Call a closure value (Value::Closure) with given args.
     /// Runs the function body inline using a mini-loop (the sentinel return_addr trick).
     /// Returns the function's return value.
-    fn call_closure_value(&mut self, func_ref: &Value, args: Vec<Value>, instructions: &[Opcode]) -> Result<Value, String> {
+    pub(crate) fn call_closure_value(&mut self, func_ref: &Value, args: Vec<Value>, instructions: &[Opcode]) -> Result<Value, String> {
         let (func_name, captured) = match func_ref {
             Value::Closure { func_name, captured } => (func_name.clone(), captured.clone()),
             other => return Err(format!("'{other}' विधि नहीं है")),
