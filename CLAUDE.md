@@ -85,6 +85,8 @@ lipi foo.vani             # auto-detected by extension
 | `src/disha.rs` | `भारत.दिशा` — navigation / geodesy (Phase 18 H4) |
 | `src/suraksha.rs` | `भारत.सुरक्षा` — Hamming ECC / CRC / TMR fault tolerance (Phase 18 H5) |
 | `src/antaral.rs` | `भारत.अंतराल` — interval arithmetic (Phase 18 H6) |
+| `src/ffi.rs` | `भारत.बाह्य` — C FFI: call any native DLL via LoadLibrary/GetProcAddress (Phase 19 F1) |
+| `src/tantra.rs` | `भारत.तंत्र` — raw memory buffers + volatile MMIO register access (Phase 19 F2) |
 | `web/studio/index.html` | LIPI Studio — Monaco-based browser IDE (Phase 18 G), served by `lipi ide` |
 | `src/main.rs` | Entry point — routes source through compiler → LVM |
 | `src/lib.rs` | WASM library root — exposes `run_source` via `wasm_bindgen` |
@@ -607,6 +609,8 @@ Four registries, each returns `Vec<(&'static str, NativeFn)>`:
 | `भारत.दिशा` | `disha::disha_registry()` | Navigation/geodesy (Phase 18, `src/disha.rs`): महावृत्त_दूरी (haversine km), दिशा_कोण (bearing°), गंतव्य (destination), ईसीईएफ (WGS-84 → ECEF); lat/lon in degrees |
 | `भारत.सुरक्षा` | `suraksha::suraksha_registry()` | Fault tolerance (Phase 18, `src/suraksha.rs`): हैमिंग_कूट/हैमिंग_विकोड (Hamming(7,4) corrects single bit-flips), सीआरसी32, बहुमत (TMR voter), समय_सीमा_जाँच (deadline) |
 | `भारत.अंतराल` | `antaral::antaral_registry()` | Interval arithmetic (Phase 18, `src/antaral.rs`): अंतराल/अंतराल_योग/घटा/गुणा/चौड़ाई/मध्य/में — rigorous `[lo,hi]` bounds. Pair with `बीज_सेट(n)` builtin for reproducible runs |
+| `भारत.बाह्य` | `ffi::bahya_registry()` | **C FFI — the "no limits" escape hatch** (Phase 19, `src/ffi.rs`): `बाह्य_पुस्तकालय(पथ)` load a DLL → handle, `बाह्य_बुलाओ(हैंडल, नाम, "<args>:<ret>", …)` resolve+call any C-ABI function, `बाह्य_बंद(हैंडल)` unload. Signature chars: `i` int32, `l` int64/ptr, `d` double, `s` C-string, `v` void. Pure Rust (links kernel32 only); Windows now, WASM = catchable error. LIMITATION: one call is all-int/ptr/str OR all-double, no mixing (no libffi). Lets LIPI drive BLAS/OpenGL/OS/hardware SDKs → any domain |
+| `भारत.तंत्र` | `tantra::tantra_registry()` | **Bare-metal memory / hardware tier** (Phase 19, `src/tantra.rs`): managed buffers `स्मृति_आवंटन/मुक्त/आकार` + bounds-checked `स्मृति_लिखो/पढ़ो_बाइट|पूर्ण|दशमलव|वाक्य` (build C structs/out-params for FFI) and `स्मृति_वाक्य(ptr)` (read a C string at any address, incl. FFI returns); raw volatile MMIO `कच्चा_पढ़ो/लिखो` (8-bit) + `कच्चा_पढ़ो३२/लिखो३२` (32-bit) for memory-mapped device registers. Pairs with `भारत.बाह्य` + a mapping driver for transistor-level hardware I/O. WASM = catchable error. NOT to be confused with `भारत.यंत्र` (FSM/rule-agents) |
 
 Key implementations:
 - **Aadhaar**: full Verhoeff algorithm with `D[10][10]`, `P[8][10]`, `INV[10]` tables. First digit must not be 0 or 1 (UIDAI rule). Test valid: `"234567890124"`.

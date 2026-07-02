@@ -19,6 +19,8 @@ mod niyantran;
 mod disha;
 mod suraksha;
 mod antaral;
+mod ffi;
+mod tantra;
 mod opcode;
 mod compiler;
 mod lvm;
