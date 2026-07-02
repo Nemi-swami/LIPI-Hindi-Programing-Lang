@@ -1,0 +1,44 @@
+# LIPI → LLM — call a chat/LLM API over real TLS.
+#
+# Shows the "LLM without limits" path: भारत.सुरक्षित gives real HTTPS, भारत.json
+# builds the request and parses the reply. Point आधार / मॉडल / शीर्षक at any LLM
+# provider's HTTP API and adapt the request/response shape to match it.
+#
+# Usage: set your endpoint, key, and model below, then:  lipi examples/llm_client.swami
+आयात भारत.सुरक्षित
+आयात भारत.json
+
+# ── configuration (edit for your provider) ────────────────────────────────────
+आधार है "https://api.example-llm.com/v1/chat"   # your provider's endpoint
+कुंजी है पर्यावरण("LLM_API_KEY")                 # or hard-code your key as a string
+मॉडल है "your-model-name"
+अधिकतम है 1024
+
+# ── एआई_पूछो: one prompt in, the model's text answer out ─────────────────────
+विधि एआई_पूछो(प्रश्न):
+    यदि कुंजी बराबर शून्य:
+        फेंको "LLM_API_KEY पर्यावरण चर सेट करें"
+
+    # Build the request body as JSON (adapt keys to your provider's schema).
+    अनुरोध है क्रमित_कोश()
+    अनुरोध है क्रमित_रखो(अनुरोध, "model", मॉडल)
+    अनुरोध है क्रमित_रखो(अनुरोध, "max_tokens", अधिकतम)
+    संदेश है {"role": "user", "content": प्रश्न}
+    अनुरोध है क्रमित_रखो(अनुरोध, "messages", [संदेश])
+    शरीर है json_लिखो(अनुरोध)
+
+    शीर्षक है {
+        "authorization": "Bearer " + कुंजी,
+        "content-type": "application/json"
+    }
+
+    प है https_भेजो(आधार, शरीर, शीर्षक)
+    यदि प["स्थिति"] != 200:
+        फेंको "API त्रुटि " + प["स्थिति"] + ": " + प["सामग्री"]
+
+    # Read the answer (adapt this path to your provider's response shape).
+    उत्तर है json_पढ़ो(प["सामग्री"])
+    फल उत्तर["content"][0]["text"]
+
+# ── run it ────────────────────────────────────────────────────────────────────
+बताओ एआई_पूछो("नमस्ते! एक वाक्य में अपना परिचय दो।")

@@ -1,0 +1,79 @@
+{
+  "name": "lipi-lang",
+  "displayName": "LIPI — लिपि",
+  "description": "Syntax highlighting, snippets and editing support for the LIPI programming language (Devanagari script, Hindi/Sanskrit keywords). Covers .swami source files plus .roman and .vani input formats.",
+  "version": "0.2.0",
+  "publisher": "lipi-lang",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "lipi",
+    "devanagari",
+    "hindi",
+    "sanskrit",
+    "swami"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "lipi",
+        "aliases": [
+          "LIPI",
+          "लिपि"
+        ],
+        "extensions": [
+          ".swami"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "lipi-roman",
+        "aliases": [
+          "LIPI Roman"
+        ],
+        "extensions": [
+          ".roman"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "lipi-vani",
+        "aliases": [
+          "LIPI Vani (Phonetic)"
+        ],
+        "extensions": [
+          ".vani"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lipi",
+        "scopeName": "source.lipi",
+        "path": "./syntaxes/lipi.tmLanguage.json"
+      },
+      {
+        "language": "lipi-roman",
+        "scopeName": "source.lipi",
+        "path": "./syntaxes/lipi.tmLanguage.json"
+      },
+      {
+        "language": "lipi-vani",
+        "scopeName": "source.lipi",
+        "path": "./syntaxes/lipi.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "lipi",
+        "path": "./snippets/lipi.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #1a1a1a; line-height: 1.5; font-size: 12pt; }
+  h1 { font-size: 22pt; margin: 0 0 2mm; }
+  .sub { color: #555; font-size: 12pt; margin: 0 0 6mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 2mm; color: #0a3d62; }
+  code, pre { font-family: "Consolas", "Courier New", monospace; }
+  pre { background: #0f1117; color: #e6e6e6; padding: 4mm 5mm; border-radius: 6px; font-size: 10.5pt; overflow: hidden; white-space: pre-wrap; }
+  .out { border-left: 3px solid #2ecc71; background: #f2fbf5; padding: 2mm 4mm; margin: 1mm 0 4mm; font-family: Consolas, monospace; font-size: 10.5pt; }
+  .out b { color: #1e7e45; font-weight: 600; }
+  ul { margin: 1mm 0 4mm; padding-left: 6mm; }
+  li { margin: 1mm 0; }
+  .tag { color: #0a66c2; font-weight: 600; }
+  .foot { margin-top: 7mm; color: #555; font-size: 10.5pt; border-top: 1px solid #ddd; padding-top: 3mm; }
+</style></head><body>
+
+<h1>LIPI — a programming language with Devanagari syntax</h1>
+<p class="sub">Hindi/Sanskrit keywords · compiled to a bytecode VM · written in 100% pure Rust · runs on desktop and in the browser (WebAssembly).</p>
+
+<p>Most languages ask you to program in English. LIPI doesn't: keywords, error messages, and the standard library are Devanagari-native. Under the hood it's a real bytecode virtual machine — source compiles to opcodes, then executes.</p>
+
+<h2>Write a function, call it</h2>
+<pre>विधि जोड़ो(अ, ब):
+    फल अ + ब
+
+बताओ जोड़ो(3, 4)</pre>
+<div class="out"><b>Output:</b> 7</div>
+
+<h2>Batteries included — including things other stdlibs don't have</h2>
+<ul>
+  <li>Data &amp; web: JSON, CSV, regex, HTTPS/TLS, sockets, threads, an HTTP server, SQL, ZIP.</li>
+  <li>A mission-critical suite: units &amp; dimensional analysis, linear algebra, quaternions, PID + Kalman control, geodesy, error-correcting codes, interval arithmetic.</li>
+  <li>Arbitrary-precision integers — <code>50!</code> exactly, no floating-point error:</li>
+</ul>
+<pre>आयात भारत.बड़ी
+बताओ महा_भाज्य("50")</pre>
+<div class="out"><b>Output:</b> 30414093201713378043612608166064768844377641568960512000000000000</div>
+
+<h2>No ceiling: a C FFI</h2>
+<p>LIPI can call any C-ABI function in any native library — and hand a LIPI function back <em>as</em> a C callback. Here C's <code>qsort</code> sorts an array using a comparator written in LIPI:</p>
+<pre>आयात भारत.बाह्य
+पुस्तकालय है बाह्य_पुस्तकालय("msvcrt.dll")
+# ... qsort called with a LIPI comparator as the C function pointer ...</pre>
+<div class="out"><b>Input:</b> [5, 2, 8, 1, 9] &nbsp;→&nbsp; <b>Output:</b> [1, 2, 5, 8, 9]</div>
+
+<h2>Real HTTPS, so it can talk to modern APIs (including LLMs)</h2>
+<pre>आयात भारत.सुरक्षित
+प है https_पाओ("https://api.github.com/zen", {"User-Agent": "LIPI"})
+बताओ प["स्थिति"]</pre>
+<div class="out"><b>Output:</b> 200</div>
+
+<p class="foot"><span class="tag">Status:</span> bytecode VM + WASM runtime, cross-platform FFI, 60+ passing example programs, an in-browser IDE, a formatter, linter, profiler, debugger, LSP, and a package manager. Open to contributors.</p>
+
+</body></html>

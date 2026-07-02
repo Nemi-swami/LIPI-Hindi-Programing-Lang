@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIPI — भारत की प्रोग्रामिंग भाषा</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@300;400;600;700;900&family=Inter:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --saffron:   #FF6B1A;
+  --saffron2:  #FF9A3C;
+  --gold:      #F5A623;
+  --navy:      #0D1B4B;
+  --navy2:     #1A2E6B;
+  --blue:      #2563EB;
+  --teal:      #0EA5E9;
+  --green:     #10B981;
+  --white:     #FFFFFF;
+  --offwhite:  #FFF8F0;
+  --gray1:     #F8F9FC;
+  --gray2:     #E5E9F0;
+  --gray3:     #8896A8;
+  --dark:      #0A0E1A;
+  --code-bg:   #0D1B2A;
+}
+
+html { font-size: 14px; }
+
+body {
+  font-family: 'Inter', 'Noto Sans Devanagari', system-ui, sans-serif;
+  background: #fff;
+  color: var(--dark);
+  line-height: 1.6;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── PAGE SETUP ── */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+.page {
+  width: 210mm;
+  min-height: 297mm;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+}
+
+/* ══════════════════════════════════════════════════
+   PAGE 1 — COVER
+══════════════════════════════════════════════════ */
+.page-cover {
+  background: linear-gradient(145deg, var(--navy) 0%, var(--navy2) 40%, #1E3A8A 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18mm 16mm;
+  position: relative;
+}
+
+/* decorative circles */
+.cover-circle1 {
+  position: absolute; top: -40mm; right: -30mm;
+  width: 110mm; height: 110mm; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,107,26,0.18), transparent 70%);
+}
+.cover-circle2 {
+  position: absolute; bottom: -20mm; left: -25mm;
+  width: 80mm; height: 80mm; border-radius: 50%;
+  background: radial-gradient(circle, rgba(14,165,233,0.15), transparent 70%);
+}
+.cover-circle3 {
+  position: absolute; bottom: 30mm; right: 10mm;
+  width: 55mm; height: 55mm; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+/* chakra pattern top-right */
+.cover-chakra {
+  position: absolute; top: 8mm; right: 8mm;
+  font-size: 28px; opacity: 0.12; color: var(--saffron2);
+  letter-spacing: 4px;
+}
+
+/* top badge */
+.cover-badge {
+  background: rgba(255,107,26,0.2);
+  border: 1px solid rgba(255,107,26,0.5);
+  border-radius: 20px;
+  padding: 4px 16px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--saffron2);
+  margin-bottom: 10mm;
+}
+
+/* logo block */
+.cover-logo {
+  text-align: center;
+  margin-bottom: 8mm;
+}
+.logo-hi {
+  font-family: 'Noto Sans Devanagari', sans-serif;
+  font-size: 5.8rem;
+  font-weight: 900;
+  color: var(--white);
+  line-height: 1;
+  letter-spacing: -2px;
+  background: linear-gradient(135deg, var(--white) 30%, var(--saffron2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+}
+.logo-en {
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-top: 1mm;
+}
+
+/* tagline */
+.cover-tagline-hi {
+  font-family: 'Noto Sans Devanagari', sans-serif;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--white);
+  text-align: center;
+  margin-bottom: 3mm;
+}
+.cover-tagline-en {
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.6);
+  text-align: center;
+  margin-bottom: 10mm;
+  letter-spacing: 0.5px;
+}
+
+/* stats row */
+.cover-stats {
+  display: flex;
+  gap: 6mm;
+  margin-bottom: 10mm;
+}
+.stat-pill {
+  background: rgba(255,255,255,0.09);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 4mm 7mm;
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+.stat-num {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--saffron2);
+  line-height: 1;
+}
+.stat-lbl {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 1px;
+}
+
+/* built-with row */
+.cover-built {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 3mm 7mm;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.65);
+  margin-bottom: 10mm;
+}
+.cover-built strong { color: #F7A34B; }
+
+/* mini code preview */
+.cover-code {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 5mm 7mm;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: #E0E8FF;
+  line-height: 1.8;
+  width: 100%;
+  max-width: 140mm;
+}
+.cv-kw  { color: #F79B2B; }
+.cv-str { color: #7DE88B; }
+.cv-fn  { color: #69C3F8; }
+.cv-cm  { color: #5B6E8A; }
+.cv-num { color: #BF9BF5; }
+
+/* cover footer */
+.cover-footer {
+  position: absolute; bottom: 8mm; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 16mm;
+}
+.cover-footer-left {
+  font-size: 0.62rem; color: rgba(255,255,255,0.3);
+  letter-spacing: 1px;
+}
+.cover-footer-right {
+  font-size: 0.62rem; color: rgba(255,255,255,0.3);
+}
+.cf-dot {
+  display: inline-block; width: 6px; height: 6px;
+  background: var(--saffron); border-radius: 50%; margin: 0 4px;
+  vertical-align: middle;
+}
+
+/* ══════════════════════════════════════════════════
+   PAGE 2 — WHAT & WHY
+══════════════════════════════════════════════════ */
+.page-2 {
+  background: var(--offwhite);
+  padding: 14mm 15mm;
+}
+.page-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8mm;
+  border-bottom: 2px solid var(--saffron);
+  padding-bottom: 4mm;
+}
+.page-num {
+  background: var(--saffron);
+  color: white; font-size: 0.7rem; font-weight: 700;
+  border-radius: 50%; width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+}
+.page-title {
+  font-size: 1.3rem; font-weight: 800;
+  color: var(--navy); letter-spacing: -0.5px;
+}
+
+.two-col { display: flex; gap: 7mm; }
+.col-60 { flex: 6; }
+.col-40 { flex: 4; }
+
+.section-h {
+  font-family: 'Noto Sans Devanagari', 'Inter', sans-serif;
+  font-size: 1.05rem; font-weight: 800;
+  color: var(--navy); margin-bottom: 3mm;
+}
+.section-h span { color: var(--saffron); }
+
+.body-text {
+  font-size: 0.78rem; color: #334155;
+  line-height: 1.8; margin-bottom: 4mm;
+}
+
+.highlight-box {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+  border-radius: 10px; padding: 5mm;
+  color: white; margin-bottom: 5mm;
+}
+.hb-quote {
+  font-family: 'Noto Sans Devanagari', sans-serif;
+  font-size: 1.0rem; font-weight: 700;
+  line-height: 1.6; margin-bottom: 2mm;
+}
+.hb-sub {
+  font-size: 0.65rem; color: rgba(255,255,255,0.55);
+  letter-spacing: 1px; text-transform: uppercase;
+}
+
+.why-list { list-style: none; }
+.why-list li {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 2.5mm 0;
+  border-bottom: 1px solid var(--gray2);
+  font-size: 0.76rem; color: #334155;
+}
+.why-list li:last-child { border-bottom: none; }
+.why-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+.why-text strong { color: var(--navy); display: block; font-size: 0.76rem; }
+.why-text span { color: #64748B; font-size: 0.7rem; }
+
+/* timeline */
+.timeline { position: relative; padding-left: 12mm; }
+.timeline::before {
+  content: '';
+  position: absolute; left: 4mm; top: 0; bottom: 0;
+  width: 2px; background: var(--gray2);
+}
+.tl-item {
+  position: relative; margin-bottom: 4mm;
+}
+.tl-dot {
+  position: absolute; left: -9.5mm; top: 2px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--saffron); border: 2px solid var(--offwhite);
+}
+.tl-phase {
+  font-size: 0.62rem; font-weight: 700; color: var(--saffron);
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.tl-desc {
+  font-size: 0.72rem; color: #475569; line-height: 1.4;
+}
+
+/* ══════════════════════════════════════════════════
+   PAGE 3 — FEATURES & CODE
+══════════════════════════════════════════════════ */
+.page-3 {
+  background: #fff;
+  padding: 14mm 15mm;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm;
+  margin-bottom: 7mm;
+}
+.feat-card {
+  background: var(--gray1);
+  border: 1px solid var(--gray2);
+  border-radius: 10px;
+  padding: 4mm;
+}
+.feat-icon { font-size: 1.5rem; margin-bottom: 2mm; }
+.feat-title {
+  font-size: 0.73rem; font-weight: 700;
+  color: var(--navy); margin-bottom: 1.5mm;
+}
+.feat-desc { font-size: 0.65rem; color: #64748B; line-height: 1.5; }
+
+.code-section { margin-bottom: 5mm; }
+.code-label {
+  font-size: 0.65rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--gray3); margin-bottom: 2mm;
+}
+.code-block {
+  background: var(--code-bg);
+  border-radius: 10px;
+  padding: 4mm 5mm;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 0.7rem;
+  line-height: 1.9;
+  color: #CDD9E8;
+  position: relative;
+}
+.code-block .dot-row {
+  display: flex; gap: 5px; margin-bottom: 3mm;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-r { background: #FF5F57; }
+.dot-y { background: #FEBC2E; }
+.dot-g { background: #28C840; }
+
+.kw  { color: #F79B2B; }
+.str { color: #7DE88B; }
+.fn  { color: #79C0FF; }
+.cm  { color: #4A6B8A; }
+.num { color: #BF9BF5; }
+.op  { color: #F87171; }
+.var { color: #E2E8F0; }
+
+.two-code { display: flex; gap: 5mm; }
+.two-code .code-section { flex: 1; }
+
+/* comparison table */
+.compare-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 0.68rem; margin-bottom: 5mm;
+}
+.compare-table th {
+  background: var(--navy);
+  color: white; font-weight: 700;
+  padding: 2.5mm 3mm; text-align: left;
+}
+.compare-table th:first-child { border-radius: 6px 0 0 0; }
+.compare-table th:last-child { border-radius: 0 6px 0 0; }
+.compare-table td {
+  padding: 2mm 3mm; border-bottom: 1px solid var(--gray2);
+  vertical-align: middle;
+}
+.compare-table tr:last-child td { border-bottom: none; }
+.compare-table tr:nth-child(even) td { background: var(--gray1); }
+.badge {
+  display: inline-block; padding: 1px 8px;
+  border-radius: 20px; font-size: 0.6rem; font-weight: 700;
+}
+.badge-green { background: #D1FAE5; color: #065F46; }
+.badge-orange { background: #FEF3C7; color: #92400E; }
+.badge-blue { background: #DBEAFE; color: #1E40AF; }
+
+/* ══════════════════════════════════════════════════
+   PAGE 4 — TECH STACK & ROADMAP
+══════════════════════════════════════════════════ */
+.page-4 {
+  background: var(--gray1);
+  padding: 14mm 15mm;
+}
+
+.arch-block {
+  background: white;
+  border: 1px solid var(--gray2);
+  border-radius: 12px;
+  padding: 5mm;
+  margin-bottom: 5mm;
+}
+.arch-title {
+  font-size: 0.8rem; font-weight: 800; color: var(--navy);
+  margin-bottom: 4mm; display: flex; align-items: center; gap: 6px;
+}
+
+.pipeline {
+  display: flex; align-items: center; gap: 2mm;
+  flex-wrap: wrap;
+}
+.pipe-step {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+  color: white; border-radius: 6px;
+  padding: 2.5mm 4mm; font-size: 0.65rem; font-weight: 700;
+  text-align: center; min-width: 22mm;
+}
+.pipe-step small {
+  display: block; font-weight: 400;
+  color: rgba(255,255,255,0.6); font-size: 0.55rem;
+  margin-top: 1px;
+}
+.pipe-arrow { font-size: 1rem; color: var(--saffron); font-weight: 900; }
+
+.tech-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm;
+  margin-bottom: 5mm;
+}
+.tech-card {
+  background: white; border: 1px solid var(--gray2);
+  border-radius: 8px; padding: 3mm;
+  text-align: center;
+}
+.tech-icon { font-size: 1.6rem; margin-bottom: 1.5mm; }
+.tech-name { font-size: 0.68rem; font-weight: 700; color: var(--navy); }
+.tech-note { font-size: 0.6rem; color: var(--gray3); }
+
+.roadmap {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm;
+}
+.rm-card {
+  border-radius: 8px; padding: 3.5mm;
+  font-size: 0.65rem;
+}
+.rm-done {
+  background: linear-gradient(135deg, #D1FAE5, #A7F3D0);
+  border: 1px solid #34D399;
+}
+.rm-next {
+  background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+  border: 1px solid #FBBF24;
+}
+.rm-future {
+  background: linear-gradient(135deg, #EFF6FF, #DBEAFE);
+  border: 1px solid #93C5FD;
+}
+.rm-label {
+  font-size: 0.55rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 1.5mm;
+}
+.rm-done .rm-label  { color: #065F46; }
+.rm-next .rm-label  { color: #92400E; }
+.rm-future .rm-label{ color: #1E40AF; }
+.rm-item { display: block; margin-bottom: 1mm; color: #334155; font-size: 0.65rem; }
+
+/* stats bottom */
+.stats-bottom {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 3mm;
+  margin-bottom: 5mm;
+}
+.sb-card {
+  background: white; border: 1px solid var(--gray2);
+  border-radius: 8px; padding: 3mm; text-align: center;
+}
+.sb-num { font-size: 1.4rem; font-weight: 900; color: var(--saffron); }
+.sb-lbl { font-size: 0.58rem; color: var(--gray3); text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* CTA */
+.cta-block {
+  background: linear-gradient(135deg, var(--navy) 0%, #1E3A8A 50%, var(--navy2) 100%);
+  border-radius: 12px; padding: 6mm 8mm;
+  text-align: center; color: white;
+}
+.cta-hi {
+  font-family: 'Noto Sans Devanagari', sans-serif;
+  font-size: 1.15rem; font-weight: 700;
+  margin-bottom: 2mm;
+}
+.cta-en { font-size: 0.75rem; color: rgba(255,255,255,0.65); margin-bottom: 4mm; }
+.cta-links {
+  display: flex; justify-content: center; gap: 6mm;
+}
+.cta-link {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 20px; padding: 2.5mm 7mm;
+  font-size: 0.68rem; font-weight: 700; color: white;
+  text-decoration: none;
+}
+
+/* page footer strip */
+.page-footer {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 6mm;
+  background: linear-gradient(90deg, var(--saffron) 0%, var(--saffron2) 33%, white 33%, white 66%, #138808 66%);
+  opacity: 0.7;
+}
+.page-footer-plain {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 1mm; background: var(--saffron); opacity: 0.4;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════
+     PAGE 1 — COVER
+════════════════════════════════════ -->
+<div class="page page-cover">
+  <div class="cover-circle1"></div>
+  <div class="cover-circle2"></div>
+  <div class="cover-circle3"></div>
+  <div class="cover-chakra">॰ ॐ ॰ ॐ ॰ ॐ ॰</div>
+
+  <div class="cover-badge">🇮🇳 &nbsp; India's First Hindi Programming Language</div>
+
+  <div class="cover-logo">
+    <div class="logo-hi">लिपि</div>
+    <div class="logo-en">L &nbsp; I &nbsp; P &nbsp; I</div>
+  </div>
+
+  <div class="cover-tagline-hi">भारत की प्रोग्रामिंग भाषा</div>
+  <div class="cover-tagline-en">Write code the way India thinks — in Devanagari script &amp; Hindi keywords</div>
+
+  <div class="cover-stats">
+    <div class="stat-pill">
+      <div class="stat-num">15</div>
+      <div class="stat-lbl">Phases</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-num">258</div>
+      <div class="stat-lbl">Tests Pass</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-num">100%</div>
+      <div class="stat-lbl">Pure Rust</div>
+    </div>
+    <div class="stat-pill">
+      <div class="stat-num">∞</div>
+      <div class="stat-lbl">Love for भारत</div>
+    </div>
+  </div>
+
+  <div class="cover-built">
+    <span>⚙️</span>
+    <span>Built with <strong>Rust</strong> &nbsp;·&nbsp; Bytecode VM &nbsp;·&nbsp; WASM Playground &nbsp;·&nbsp; Roman Input &nbsp;·&nbsp; TCO &nbsp;·&nbsp; Enums</span>
+  </div>
+
+  <div class="cover-code">
+    <div style="display:flex;gap:5px;margin-bottom:8px">
+      <span style="width:8px;height:8px;border-radius:50%;background:#FF5F57;display:inline-block"></span>
+      <span style="width:8px;height:8px;border-radius:50%;background:#FEBC2E;display:inline-block"></span>
+      <span style="width:8px;height:8px;border-radius:50%;background:#28C840;display:inline-block"></span>
+      <span style="margin-left:6px;font-size:0.65rem;color:#4A6B8A">namaste.swami</span>
+    </div>
+<span class="cv-cm">। भारत की पहली हिंदी प्रोग्रामिंग भाषा ।</span>
+<span class="cv-kw">विधि</span> <span class="cv-fn">नमस्ते</span>(नाम):
+    <span class="cv-kw">फल</span> <span class="cv-str">"नमस्ते, "</span> + नाम + <span class="cv-str">"! 🇮🇳"</span>
+
+<span class="cv-kw">बताओ</span> नमस्ते(<span class="cv-str">"दुनिया"</span>)
+<span class="cv-cm">→  नमस्ते, दुनिया! 🇮🇳</span>
+  </div>
+
+  <div class="cover-footer">
+    <div class="cover-footer-left">LIPI LANG &nbsp; · &nbsp; 2024–2026</div>
+    <div class="cover-footer-right">
+      <span class="cf-dot"></span> Devanagari
+      <span class="cf-dot"></span> Rust
+      <span class="cf-dot"></span> Open Source
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     PAGE 2 — WHAT & WHY
+════════════════════════════════════ -->
+<div class="page page-2" style="padding-bottom:20mm">
+
+  <div class="page-header">
+    <div class="page-num">2</div>
+    <div class="page-title">What is LIPI &amp; Why does it exist?</div>
+  </div>
+
+  <div class="two-col">
+    <!-- LEFT: What + Why -->
+    <div class="col-60">
+      <div class="section-h">What is <span>LIPI</span>?</div>
+      <p class="body-text">
+        <strong>LIPI (लिपि)</strong> is India's first full-featured programming language written entirely in
+        <strong>Devanagari script</strong> with <strong>Hindi &amp; Sanskrit keywords</strong>.
+        Every keyword, every builtin, every error message speaks in the language 600 million
+        Indians read and write every day.
+      </p>
+      <p class="body-text">
+        From <code style="background:#e8edf4;padding:1px 5px;border-radius:4px;font-size:0.7rem">विधि</code> (function) to
+        <code style="background:#e8edf4;padding:1px 5px;border-radius:4px;font-size:0.7rem">यदि/अन्यथा</code> (if/else) to
+        <code style="background:#e8edf4;padding:1px 5px;border-radius:4px;font-size:0.7rem">जब तक</code> (while) —
+        the syntax reads like natural Hindi. Variables use Devanagari names, numbers can be written
+        in Hindi digits (१, २, ३…) and even in Indian units (५ लाख = 500,000).
+      </p>
+
+      <div class="highlight-box">
+        <div class="hb-quote">"If a child in Bhopal can learn algebra in Hindi, why should she need to switch to English to write her first program?"</div>
+        <div class="hb-sub">— The core philosophy of LIPI</div>
+      </div>
+
+      <div class="section-h" style="margin-top:4mm">Why was <span>LIPI</span> built?</div>
+      <ul class="why-list">
+        <li>
+          <span class="why-icon">🎓</span>
+          <span class="why-text">
+            <strong>Language Barrier in CS Education</strong>
+            <span>700M Hindi speakers are locked out of programming because every language is in English.</span>
+          </span>
+        </li>
+        <li>
+          <span class="why-icon">🌍</span>
+          <span class="why-text">
+            <strong>Cultural Identity in Technology</strong>
+            <span>India contributed zero, Fibonacci via Virahanka, trigonometry via Āryabhaṭa — yet our tech speaks English.</span>
+          </span>
+        </li>
+        <li>
+          <span class="why-icon">🔬</span>
+          <span class="why-text">
+            <strong>Proof of Concept</strong>
+            <span>Demonstrate that a production-quality, bytecode-compiled language can be built in pure Rust with non-Latin syntax.</span>
+          </span>
+        </li>
+        <li>
+          <span class="why-icon">🤝</span>
+          <span class="why-text">
+            <strong>Bridge for New Programmers</strong>
+            <span>Teach programming concepts to Hindi-medium students without the cognitive load of learning English simultaneously.</span>
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- RIGHT: Timeline -->
+    <div class="col-40">
+      <div class="section-h">Development <span>Timeline</span></div>
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#10B981"></div>
+          <div class="tl-phase">Phase 1–4 · Core</div>
+          <div class="tl-desc">Lexer, parser, AST, arithmetic, variables, conditionals, WASM playground</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#10B981"></div>
+          <div class="tl-phase">Phase 5–6 · Data Structures</div>
+          <div class="tl-desc">Lists, dicts, classes, inheritance, object methods</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#10B981"></div>
+          <div class="tl-phase">Phase 7–9 · I/O & Errors</div>
+          <div class="tl-desc">While loops, break/continue, REPL, try/catch, string interpolation</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#10B981"></div>
+          <div class="tl-phase">Phase 10–11 · Functions</div>
+          <div class="tl-desc">Lambdas, true closures, HOFs (map/filter/reduce), iterable for-loops</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#10B981"></div>
+          <div class="tl-phase">Phase 12–13 · Language+</div>
+          <div class="tl-desc">Varargs, ternary, bitwise ops, dict iteration, boolean keywords, globals</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#10B981"></div>
+          <div class="tl-phase">Phase 14 · भारत Math</div>
+          <div class="tl-desc">Ancient Hindu math (Virahanka/Āryabhaṭa/Brahmagupta), Indian number formatting, स्वरूप()</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#10B981"></div>
+          <div class="tl-phase">Phase 15 · Completeness</div>
+          <div class="tl-desc">Enums (विकल्प), pattern matching (मिलाओ), TCO, triple-quote strings, ₹ formatting</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="background:#F59E0B; box-shadow:0 0 0 3px rgba(245,158,11,0.2)"></div>
+          <div class="tl-phase">Phase 16 · Next</div>
+          <div class="tl-desc">Module system, generators (उत्पन्न), named format placeholders</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer-plain"></div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     PAGE 3 — FEATURES & CODE
+════════════════════════════════════ -->
+<div class="page page-3" style="padding-bottom:20mm">
+
+  <div class="page-header">
+    <div class="page-num">3</div>
+    <div class="page-title">Features &amp; Code Examples</div>
+  </div>
+
+  <!-- Feature grid -->
+  <div class="feature-grid">
+    <div class="feat-card">
+      <div class="feat-icon">🔤</div>
+      <div class="feat-title">Devanagari Syntax</div>
+      <div class="feat-desc">Full Unicode support — keywords, variables, strings, even number literals in Hindi digits</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">⚡</div>
+      <div class="feat-title">Bytecode VM</div>
+      <div class="feat-desc">AST compiled to LVM opcodes, not tree-walked. Fast execution with stack-based VM</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🌐</div>
+      <div class="feat-title">WASM Playground</div>
+      <div class="feat-desc">Runs in any browser — compile to WebAssembly with wasm-pack, zero install needed</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">⌨️</div>
+      <div class="feat-title">Roman Input</div>
+      <div class="feat-desc">Write LIPI phonetically — type "batao", "yadi", "vidhi" and it auto-transliterates</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🔁</div>
+      <div class="feat-title">Tail-Call Opt.</div>
+      <div class="feat-desc">TCO for deep recursion — tail calls reuse the current frame, no stack overflow</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🎯</div>
+      <div class="feat-title">Enums &amp; Match</div>
+      <div class="feat-desc">Algebraic data types with payload, exhaustive pattern matching (मिलाओ/विकल्प)</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🏛️</div>
+      <div class="feat-title">भारत Stdlib</div>
+      <div class="feat-desc">Aadhaar validation (Verhoeff), UPI, GST, EMI, ancient Hindu math functions</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🔢</div>
+      <div class="feat-title">Indian Numbers</div>
+      <div class="feat-desc">5 लाख, 2 करोड़ literals; ₹12,34,567 formatting; Devanagari digit support</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🧪</div>
+      <div class="feat-title">258 Tests</div>
+      <div class="feat-desc">Comprehensive stress test — every feature, every edge case, all green ✓</div>
+    </div>
+  </div>
+
+  <!-- Code examples -->
+  <div class="two-code">
+    <div class="code-section">
+      <div class="code-label">🔢 Indian Numbers &amp; Formatting</div>
+      <div class="code-block">
+        <div class="dot-row"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+<span class="kw">आयात</span> भारत.संख्या
+
+राशि <span class="op">है</span> <span class="num">5</span> लाख        <span class="cm">। 500,000 ।</span>
+बड़ा  <span class="op">है</span> <span class="num">२</span> करोड़      <span class="cm">। 20,000,000 ।</span>
+
+<span class="kw">बताओ</span> <span class="fn">स्वरूप</span>(<span class="str">"{:₹}"</span>, <span class="num">1234567</span>)
+<span class="cm">→  ₹12,34,567</span>
+
+<span class="kw">बताओ</span> <span class="fn">लाख_में</span>(<span class="num">750000</span>)
+<span class="cm">→  7.50 लाख</span>
+
+<span class="kw">बताओ</span> <span class="fn">rुपये_में</span>(राशि)
+<span class="cm">→  ₹5,00,000</span>
+      </div>
+    </div>
+    <div class="code-section">
+      <div class="code-label">🎯 Enums &amp; Pattern Matching</div>
+      <div class="code-block">
+        <div class="dot-row"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+<span class="kw">विकल्प</span> <span class="fn">मौसम</span>:
+    वर्षा(<span class="var">मिमी</span>)
+    धूप
+    बादल
+
+म <span class="op">है</span> मौसम.वर्षा(<span class="num">42</span>)
+
+<span class="kw">मिलाओ</span> म:
+    वर्षा(<span class="var">r</span>):
+        <span class="kw">बताओ</span> <span class="str">"बारिश: "</span> + <span class="var">r</span> + <span class="str">" mm"</span>
+    धूप:
+        <span class="kw">बताओ</span> <span class="str">"☀️ धूप है!"</span>
+    <span class="kw">अन्यथा</span>:
+        <span class="kw">बताओ</span> <span class="str">"बादल"</span>
+<span class="cm">→  बारिश: 42 mm</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:5mm">
+    <div class="code-section">
+      <div class="code-label">🧮 Ancient Hindu Math (भारत.गणित) &amp; Closures</div>
+      <div class="code-block" style="display:flex;gap:5mm">
+        <div style="flex:1">
+          <div class="dot-row"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+<span class="kw">आयात</span> भारत.गणित
+
+<span class="cm">। Virahanka Fibonacci (600 CE) ।</span>
+<span class="kw">बताओ</span> <span class="fn">विरहांक</span>(<span class="num">10</span>)   <span class="cm">→ 55</span>
+
+<span class="cm">। Bhāskara II Combinations (1150 CE) ।</span>
+<span class="kw">बताओ</span> <span class="fn">संयोजन</span>(<span class="num">10</span>, <span class="num">3</span>) <span class="cm">→ 120</span>
+
+<span class="cm">। Āryabhaṭa Trigonometry (499 CE) ।</span>
+<span class="kw">बताओ</span> <span class="fn">ज्या</span>(पाई / <span class="num">6</span>)   <span class="cm">→ 0.5</span>
+        </div>
+        <div style="flex:1">
+<span class="cm">। True Closures ।</span>
+<span class="kw">विधि</span> <span class="fn">गुणक</span>(n):
+    <span class="kw">फल</span> <span class="kw">लाम्डा</span>(x): x * n
+
+दोगुना <span class="op">है</span> गुणक(<span class="num">2</span>)
+तिगुना <span class="op">है</span> गुणक(<span class="num">3</span>)
+
+<span class="kw">बताओ</span> दोगुना(<span class="num">7</span>)   <span class="cm">→ 14</span>
+<span class="kw">बताओ</span> तिगुना(<span class="num">5</span>)   <span class="cm">→ 15</span>
+
+<span class="cm">। HOF pipeline ।</span>
+<span class="kw">बताओ</span> <span class="fn">मोड़ो</span>(<span class="fn">मानचित्र</span>(
+    <span class="fn">छानो</span>([<span class="num">1</span>..<span class="num">10</span>], <span class="kw">लाम्डा</span>(x): x%<span class="num">2</span>==<span class="num">0</span>),
+    दोगुना), <span class="num">0</span>, <span class="kw">लाम्डा</span>(a,b): a+b)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer-plain"></div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     PAGE 4 — TECH STACK & CTA
+════════════════════════════════════ -->
+<div class="page page-4" style="padding-bottom:20mm">
+
+  <div class="page-header">
+    <div class="page-num">4</div>
+    <div class="page-title">Architecture, Tech Stack &amp; What's Next</div>
+  </div>
+
+  <!-- Architecture pipeline -->
+  <div class="arch-block">
+    <div class="arch-title">⚙️ Execution Pipeline</div>
+    <div class="pipeline">
+      <div class="pipe-step">
+        source.swami
+        <small>LIPI / Roman</small>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        Lexer
+        <small>Devanagari tokens + INDENT/DEDENT</small>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        Parser
+        <small>SOV Grammar → AST</small>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        Compiler
+        <small>AST → LVM Opcodes</small>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        LVM
+        <small>Stack VM execution</small>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step" style="background:linear-gradient(135deg,#FF6B1A,#FF9A3C)">
+        stdout
+        <small>or WASM output</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bottom">
+    <div class="sb-card">
+      <div class="sb-num">60+</div>
+      <div class="sb-lbl">Opcodes</div>
+    </div>
+    <div class="sb-card">
+      <div class="sb-num">8</div>
+      <div class="sb-lbl">Source Files</div>
+    </div>
+    <div class="sb-card">
+      <div class="sb-num">5K+</div>
+      <div class="sb-lbl">Lines of Rust</div>
+    </div>
+    <div class="sb-card">
+      <div class="sb-num">4</div>
+      <div class="sb-lbl">Stdlib Modules</div>
+    </div>
+    <div class="sb-card">
+      <div class="sb-num">0</div>
+      <div class="sb-lbl">Dependencies*</div>
+    </div>
+  </div>
+
+  <!-- Tech grid -->
+  <div class="tech-grid">
+    <div class="tech-card">
+      <div class="tech-icon">🦀</div>
+      <div class="tech-name">Rust</div>
+      <div class="tech-note">Core language, zero deps</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">🌐</div>
+      <div class="tech-name">WebAssembly</div>
+      <div class="tech-note">wasm-pack browser port</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">⚙️</div>
+      <div class="tech-name">LVM</div>
+      <div class="tech-note">Custom bytecode VM</div>
+    </div>
+    <div class="tech-card">
+      <div class="tech-icon">📝</div>
+      <div class="tech-name">.swami / .libc</div>
+      <div class="tech-note">Source &amp; binary formats</div>
+    </div>
+  </div>
+
+  <!-- Roadmap -->
+  <div style="margin-bottom:5mm">
+    <div class="arch-title" style="font-size:0.8rem;font-weight:800;color:var(--navy);margin-bottom:3mm">🗺️ Roadmap</div>
+    <div class="roadmap">
+      <div class="rm-card rm-done">
+        <div class="rm-label">✅ Complete</div>
+        <span class="rm-item">🔤 Devanagari syntax</span>
+        <span class="rm-item">⚡ Bytecode VM</span>
+        <span class="rm-item">🎯 Enums + match</span>
+        <span class="rm-item">🔁 TCO</span>
+        <span class="rm-item">🌐 WASM</span>
+        <span class="rm-item">⌨️ Roman input</span>
+        <span class="rm-item">🏛️ भारत stdlib</span>
+      </div>
+      <div class="rm-card rm-next">
+        <div class="rm-label">🚧 Phase 16</div>
+        <span class="rm-item">📦 Module system</span>
+        <span class="rm-item">🏷️ Named placeholders</span>
+        <span class="rm-item">🔄 Generators (उत्पन्न)</span>
+        <span class="rm-item">📖 Better REPL</span>
+      </div>
+      <div class="rm-card rm-future">
+        <div class="rm-label">🔭 Future</div>
+        <span class="rm-item">🖥️ VS Code extension</span>
+        <span class="rm-item">📚 Learning platform</span>
+        <span class="rm-item">🌍 Other Indian scripts</span>
+        <span class="rm-item">📦 Package registry</span>
+      </div>
+      <div class="rm-card rm-future">
+        <div class="rm-label">🌟 Vision</div>
+        <span class="rm-item">Teach CS in Hindi</span>
+        <span class="rm-item">School curriculum</span>
+        <span class="rm-item">Hindi CS books</span>
+        <span class="rm-item">Community LIPI</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-block">
+    <div class="cta-hi">जय हिंद। जय LIPI। 🇮🇳</div>
+    <div class="cta-en">
+      If you believe technology should be accessible to every Indian regardless of language,<br>
+      share this, star the repo, and let's build India's coding future — in Hindi.
+    </div>
+    <div class="cta-links">
+      <a class="cta-link" href="#">🦀 Built in Pure Rust</a>
+      <a class="cta-link" href="#">📖 Open Source</a>
+      <a class="cta-link" href="#">💬 DM for collaboration</a>
+    </div>
+    <div style="margin-top:3mm;font-size:0.62rem;color:rgba(255,255,255,0.35)">
+      *except wasm-bindgen for the browser playground &nbsp;·&nbsp; All 258 tests pass &nbsp;·&nbsp; Works on Windows, Linux, macOS
+    </div>
+  </div>
+
+  <div class="page-footer-plain"></div>
+</div>
+
+</body>
+</html>

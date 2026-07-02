@@ -1,0 +1,72 @@
+# LIPI — Roman QWERTY demo
+# Type Hindi keywords phonetically, no special keyboard needed!
+#
+# Run with:  lipi demo_roman.roman
+#            lipi roman demo_roman.roman
+#
+# Keyword map (partial):
+#   batao  → बताओ     likho   → लिखो     hai    → है
+#   yadi   → यदि      anyatha → अन्यथा   toh    → तो
+#   vidhi  → विधि     phal    → फल       aur    → और
+#   ya     → या       nahin   → नहीं
+#   jab tak→ जब तक   ke liye → के लिए   bar karo→ बार करो
+#   suchi  → सूची     kosh    → कोश      varg   → वर्ग
+#   satya  → सत्य     asatya  → असत्य
+
+batao "=== LIPI Roman Input Demo ==="
+
+# Basic variables and arithmetic
+ka hai 10
+kha hai 25
+batao ka + kha
+
+# Conditional
+yadi ka se kam kha:
+    batao "kha bada hai"
+anyatha:
+    batao "ka bada hai"
+
+# Function definition
+vidhi joodo(a, b):
+    phal a + b
+
+batao joodo(100, 200)
+
+# Loop
+batao "Counting 1 to 5:"
+i ke liye 5 mein:
+    likho vakya(i + 1) + " "
+batao ""
+
+# List
+anks hai [10, 20, 30, 40, 50]
+batao anks.lambai()
+anks hai anks.joodo(60)
+batao anks
+
+# While loop with break
+n hai 1
+jab tak satya:
+    yadi n se adhik 5:
+        band karo
+    likho vakya(n) + " "
+    n hai n + 1
+batao ""
+
+# Lambda and HOF
+duguna hai lamda(x): x * 2
+batao manchitra([1, 2, 3, 4, 5], duguna)
+
+# String formatting
+aayat bharat.ganit
+batao swaroop("sin(30) = {:.4}", jya(pai / 6))
+batao swaroop("Fibonacci(10) = {}", virahank(10))
+batao swaroop("C(10,3) = {}", sanyojan(10, 3))
+
+# Error handling
+koshish:
+    x hai purnanks("abc")
+pakdo truti:
+    batao "Error caught: " + truti
+
+batao "=== Roman Input Works! ==="

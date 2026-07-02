@@ -1,0 +1,27 @@
+# winget manifest for LIPI (Windows Package Manager).
+# Publish to microsoft/winget-pkgs (or a private source). Fill in InstallerUrl
+# and InstallerSha256 for a released lipi.exe / installer before submitting.
+# Then users run:  winget install LIPI.LIPI
+PackageIdentifier: LIPI.LIPI
+PackageVersion: 0.2.0
+PackageName: LIPI
+Publisher: LIPI
+License: MIT
+ShortDescription: Programming language with Devanagari syntax, compiled to a bytecode VM (pure Rust).
+PackageUrl: https://github.com/naraxcel/lipi-lang
+Moniker: lipi
+Tags:
+  - programming-language
+  - devanagari
+  - hindi
+  - rust
+  - bytecode-vm
+Installers:
+  - Architecture: x64
+    InstallerType: portable
+    InstallerUrl: https://github.com/naraxcel/lipi-lang/releases/download/v0.2.0/lipi.exe
+    InstallerSha256: REPLACE_WITH_EXE_SHA256
+    Commands:
+      - lipi
+ManifestType: singleton
+ManifestVersion: 1.6.0

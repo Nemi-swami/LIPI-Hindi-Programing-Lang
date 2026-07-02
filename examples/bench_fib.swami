@@ -1,0 +1,7 @@
+# Benchmark — naive recursive fibonacci (call overhead)
+विधि फिब(न):
+    यदि न से कम 2:
+        फल न
+    फल फिब(न - 1) + फिब(न - 2)
+
+बताओ फिब(24)

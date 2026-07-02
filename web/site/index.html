@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LIPI — a Devanagari-syntax programming language</title>
+<meta name="description" content="LIPI is a programming language with Hindi/Sanskrit keywords, compiled to a bytecode VM in pure Rust, running on desktop and in the browser."/>
+<link rel="icon" href="logo.svg"/>
+<style>
+  :root{
+    --bg:#0c0f17; --bg2:#11151f; --card:#151a26; --line:#232a3a;
+    --fg:#e8ecf3; --mut:#93a0b5; --acc:#ff7a45; --acc2:#9b5cff; --ok:#43d693;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--fg);font:15px/1.6 "Segoe UI",system-ui,Arial,sans-serif}
+  code,pre,.mono{font-family:"Consolas","Cascadia Code","Courier New",monospace}
+  a{color:inherit}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 22px}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:10;background:rgba(12,15,23,.82);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:14px;height:60px}
+  nav .logo{width:34px;height:34px}
+  nav b{font-size:18px;letter-spacing:.5px}
+  nav .sp{flex:1}
+  nav a.link{color:var(--mut);text-decoration:none;margin-left:20px;font-size:14px}
+  nav a.link:hover{color:var(--fg)}
+  .btn{display:inline-block;padding:9px 16px;border-radius:9px;font-weight:600;text-decoration:none;font-size:14px}
+  .btn.p{background:linear-gradient(120deg,var(--acc),var(--acc2));color:#fff}
+  .btn.g{border:1px solid var(--line);color:var(--fg)}
+
+  /* hero */
+  .hero{padding:64px 0 30px;text-align:center;position:relative;overflow:hidden}
+  .hero .glow{position:absolute;inset:-40% 0 auto 0;height:420px;background:radial-gradient(60% 100% at 50% 0,rgba(155,92,255,.22),transparent 70%);pointer-events:none}
+  .hero h1{font-size:44px;line-height:1.1;margin:18px 0 12px;letter-spacing:-.5px}
+  .hero h1 .grad{background:linear-gradient(120deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.lead{color:var(--mut);font-size:18px;max-width:680px;margin:0 auto 22px}
+  .hero .logo{width:84px;height:84px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+  /* try-it */
+  .try{margin:40px 0}
+  .try h2,.section h2{font-size:24px;margin-bottom:6px;text-align:center}
+  .try .hint,.section .hint{color:var(--mut);text-align:center;margin-bottom:18px;font-size:14px}
+  .live{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .panel .head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);color:var(--mut);font-size:12.5px}
+  .dot{width:9px;height:9px;border-radius:50%;background:#43d693}
+  textarea{width:100%;height:230px;background:#0a0d14;color:#e8ecf3;border:0;padding:14px;resize:vertical;font:13.5px/1.55 Consolas,monospace;outline:none}
+  #out{height:230px;overflow:auto;padding:14px;white-space:pre-wrap;font:13.5px/1.55 Consolas,monospace;color:#cfe9d8}
+  #out .er{color:#ff8b8b}
+  #out .ph{color:var(--mut)}
+  .runbar{display:flex;gap:10px;align-items:center;margin-top:12px;justify-content:center}
+  .runbar button{cursor:pointer;padding:10px 20px;border-radius:9px;border:0;font-weight:700;font-size:14px;background:linear-gradient(120deg,var(--acc),var(--acc2));color:#fff}
+  .runbar button:disabled{opacity:.5;cursor:default}
+  .runbar select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13px}
+  .runbar .st{color:var(--mut);font-size:13px}
+
+  /* features */
+  .section{padding:46px 0;border-top:1px solid var(--line)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .feat h3{font-size:15px;margin-bottom:6px}
+  .feat p{color:var(--mut);font-size:13.5px}
+  .feat .ic{font-size:20px;margin-bottom:8px;display:block}
+
+  /* examples */
+  .ex{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .exp{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .exp .t{padding:10px 14px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+  .exp pre{padding:14px;overflow:auto;font-size:13px;color:#e8ecf3;background:#0a0d14}
+  .exp .o{padding:10px 14px;border-top:1px solid var(--line);color:var(--ok);font-size:13px}
+  .exp .o b{color:#8fb0c9;font-weight:600}
+  .kw{color:#ff9d5c}.str{color:#7ee787}.cm{color:#6b7686}
+
+  /* install */
+  .tabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+  .tabs button{cursor:pointer;background:var(--card);border:1px solid var(--line);color:var(--mut);border-radius:9px;padding:9px 16px;font-size:14px;font-weight:600}
+  .tabs button.on{color:#fff;border-color:transparent;background:linear-gradient(120deg,var(--acc),var(--acc2))}
+  .install pre{background:#0a0d14;border:1px solid var(--line);border-radius:12px;padding:16px;overflow:auto;font-size:13.5px;color:#e8ecf3}
+  .install .note{color:var(--mut);font-size:13px;margin-top:10px}
+  .install .pane{display:none}.install .pane.on{display:block}
+
+  footer{border-top:1px solid var(--line);padding:30px 0;color:var(--mut);font-size:13px;text-align:center}
+  @media(max-width:760px){.live,.ex{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.hero h1{font-size:34px}}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <img class="logo" src="logo.svg" alt="LIPI"/>
+  <b>LIPI</b>
+  <span class="sp"></span>
+  <a class="link" href="#features">Features</a>
+  <a class="link" href="#examples">Examples</a>
+  <a class="link" href="#install">Install</a>
+  <a class="link" href="../index.html">Playground</a>
+</div></nav>
+
+<header class="hero"><div class="glow"></div><div class="wrap">
+  <img class="logo" src="logo.svg" alt="LIPI logo"/>
+  <h1>Program in <span class="grad">Devanagari</span>.</h1>
+  <p class="lead">LIPI is a programming language with Hindi/Sanskrit keywords, compiled to a bytecode VM in <b>100% pure Rust</b> — running on desktop and right here in your browser.</p>
+  <div class="cta">
+    <a class="btn p" href="#try">Try it live ↓</a>
+    <a class="btn g" href="#install">Install</a>
+  </div>
+</div></header>
+
+<!-- LIVE runner -->
+<section class="try" id="try"><div class="wrap">
+  <h2>Run it live</h2>
+  <p class="hint">This editor executes LIPI in your browser via WebAssembly — no install, real output.</p>
+  <div class="live">
+    <div class="panel">
+      <div class="head"><span class="dot"></span> editor · main.swami</div>
+      <textarea id="code" spellcheck="false">विधि वर्गफल(न):
+    फल न * न
+
+बताओ "वर्ग:"
+बताओ मानचित्र([1, 2, 3, 4, 5], वर्गफल)
+
+आयात भारत.बड़ी
+बताओ "20! = " + महा_भाज्य("20")</textarea>
+    </div>
+    <div class="panel">
+      <div class="head"><span class="dot"></span> output</div>
+      <div id="out"><span class="ph">Press Run…</span></div>
+    </div>
+  </div>
+  <div class="runbar">
+    <button id="run" disabled>Run ▶</button>
+    <select id="samples">
+      <option value="0">Sample: squares + big int</option>
+      <option value="1">Sample: classes</option>
+      <option value="2">Sample: closures &amp; filter</option>
+      <option value="3">Sample: dimensional analysis</option>
+    </select>
+    <span class="st" id="st">loading runtime…</span>
+  </div>
+</div></section>
+
+<!-- FEATURES -->
+<section class="section" id="features"><div class="wrap">
+  <h2>What's in the box</h2>
+  <p class="hint">A complete language, not a toy.</p>
+  <div class="grid">
+    <div class="feat"><span class="ic">⚙️</span><h3>Bytecode VM</h3><p>Source compiles to opcodes and runs on a stack VM. Tail-call optimized. Also compiles to WebAssembly.</p></div>
+    <div class="feat"><span class="ic">🧩</span><h3>Full language</h3><p>Functions, closures, classes + inheritance, generators, pattern matching, decorators, comprehensions, typed exceptions.</p></div>
+    <div class="feat"><span class="ic">🔌</span><h3>C FFI</h3><p>Call any native library — and pass a LIPI function back as a C callback. Cross-platform (Windows/Linux/macOS).</p></div>
+    <div class="feat"><span class="ic">🌐</span><h3>Networking</h3><p>HTTPS/TLS, JSON, an HTTP server, sockets, threads — enough to talk to modern APIs and LLMs.</p></div>
+    <div class="feat"><span class="ic">📐</span><h3>Mission-critical stdlib</h3><p>Units &amp; dimensional analysis, linear algebra, quaternions, PID + Kalman control, geodesy, ECC, intervals.</p></div>
+    <div class="feat"><span class="ic">🛠️</span><h3>Tooling</h3><p>Browser IDE, formatter, linter, doc generator, profiler, step debugger, LSP, package manager.</p></div>
+  </div>
+</div></section>
+
+<!-- EXAMPLES -->
+<section class="section" id="examples"><div class="wrap">
+  <h2>Examples</h2>
+  <p class="hint">Real code, real output.</p>
+  <div class="ex">
+    <div class="exp"><div class="t">Functions</div>
+      <pre><span class="kw">विधि</span> जोड़ो(अ, ब):
+    <span class="kw">फल</span> अ + ब
+
+<span class="kw">बताओ</span> जोड़ो(3, 4)</pre>
+      <div class="o"><b>→</b> 7</div></div>
+
+    <div class="exp"><div class="t">Arbitrary-precision integers</div>
+      <pre><span class="kw">आयात</span> भारत.बड़ी
+<span class="kw">बताओ</span> महा_भाज्य(<span class="str">"50"</span>)  <span class="cm"># 50!</span></pre>
+      <div class="o"><b>→</b> 30414093201713378043612608166064768844377641568960512000000000000</div></div>
+
+    <div class="exp"><div class="t">C FFI — qsort with a LIPI callback</div>
+      <pre><span class="kw">आयात</span> भारत.बाह्य
+<span class="cm"># C qsort sorts using a LIPI comparator</span>
+बाह्य_बुलाओ(lib, <span class="str">"qsort"</span>, <span class="str">"llll:v"</span>, आधार, 5, 4, सीएमपी)</pre>
+      <div class="o"><b>[5,2,8,1,9] →</b> [1, 2, 5, 8, 9]</div></div>
+
+    <div class="exp"><div class="t">HTTPS — talk to any API</div>
+      <pre><span class="kw">आयात</span> भारत.सुरक्षित
+प है https_पाओ(<span class="str">"https://api.github.com/zen"</span>,
+              {<span class="str">"User-Agent"</span>: <span class="str">"LIPI"</span>})
+<span class="kw">बताओ</span> प[<span class="str">"स्थिति"</span>]</pre>
+      <div class="o"><b>→</b> 200</div></div>
+  </div>
+</div></section>
+
+<!-- INSTALL -->
+<section class="section install" id="install"><div class="wrap">
+  <h2>Install</h2>
+  <p class="hint">Pick your platform.</p>
+  <div class="tabs">
+    <button class="on" data-t="unix">Terminal (Linux)</button>
+    <button data-t="mac">macOS</button>
+    <button data-t="win">Windows (.exe)</button>
+    <button data-t="src">From source</button>
+  </div>
+
+  <div class="pane on" data-p="unix">
+    <pre>curl -fsSL https://raw.githubusercontent.com/&lt;you&gt;/lipi-lang/main/install.sh | sh</pre>
+    <p class="note">Builds from source with Cargo and installs <code>lipi</code> to <code>~/.local/bin</code>. Requires Rust (rustup.rs) and git.</p>
+  </div>
+  <div class="pane" data-p="mac">
+    <pre>brew install &lt;you&gt;/tap/lipi
+# or:
+curl -fsSL https://raw.githubusercontent.com/&lt;you&gt;/lipi-lang/main/install.sh | sh</pre>
+    <p class="note">The Homebrew formula (packaging/homebrew/lipi.rb) builds from source. The install script works on both Linux and macOS.</p>
+  </div>
+  <div class="pane" data-p="win">
+    <pre># PowerShell one-liner:
+irm https://raw.githubusercontent.com/&lt;you&gt;/lipi-lang/main/install.ps1 | iex
+
+# or with winget (once published):
+winget install LIPI.LIPI</pre>
+    <p class="note">Or download <code>lipi.exe</code> from Releases and run <code>install.bat</code>. Prebuilt binary — no build step.</p>
+  </div>
+  <div class="pane" data-p="src">
+    <pre>git clone https://github.com/&lt;you&gt;/lipi-lang
+cd lipi-lang
+cargo build --release
+# binary: target/release/lipi</pre>
+    <p class="note">Pure Rust, no external crates. Builds on Windows, Linux, and macOS.</p>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  LIPI · a Devanagari-syntax language in pure Rust · bytecode VM + WebAssembly · open source.
+</div></footer>
+
+<script type="module">
+  import init, * as W from '../pkg/lipi.js';
+  const runBtn = document.getElementById('run');
+  const codeEl = document.getElementById('code');
+  const outEl  = document.getElementById('out');
+  const stEl   = document.getElementById('st');
+
+  const samples = [
+`विधि वर्गफल(न):
+    फल न * न
+
+बताओ "वर्ग:"
+बताओ मानचित्र([1, 2, 3, 4, 5], वर्गफल)
+
+आयात भारत.बड़ी
+बताओ "20! = " + महा_भाज्य("20")`,
+`वर्ग व्यक्ति:
+    विधि बनाओ(नाम, आयु):
+        यह.नाम है नाम
+        यह.आयु है आयु
+    विधि परिचय():
+        बताओ यह.नाम + ", आयु " + यह.आयु
+
+प है व्यक्ति("राम", 30)
+प.परिचय()`,
+`विधि गुणक(न):
+    फल लाम्डा(x): न * x
+
+दोगुना है गुणक(2)
+बताओ दोगुना(7)
+बताओ छानो([1,2,3,4,5,6], लाम्डा(x): x % 2 बराबर 0)`,
+`आयात भारत.मात्रक
+बल है गुणा_मात्रा(मात्रा(2, "किग्रा"), मात्रा(9, "मीटर/सेकंड२"))
+बताओ मात्रा_वाक्य(बल)`
+  ];
+  document.getElementById('samples').addEventListener('change', e => {
+    codeEl.value = samples[+e.target.value] || samples[0];
+  });
+
+  function run(){
+    if(runBtn.disabled) return;
+    stEl.textContent = 'running…';
+    try{
+      const res = W.run_source(codeEl.value);
+      const isErr = /^(LVM|व्याकरण) त्रुटि:/.test(res);
+      outEl.innerHTML = '';
+      if(!res.trim()){ outEl.innerHTML = '<span class="ph">(no output)</span>'; }
+      else if(isErr){ const s=document.createElement('span'); s.className='er'; s.textContent=res; outEl.appendChild(s); }
+      else { outEl.textContent = res; }
+      stEl.textContent = isErr ? '✖ error' : '✔ done';
+    }catch(e){
+      outEl.innerHTML = '<span class="er">Error: '+e.message+'</span>';
+      stEl.textContent = '✖ error';
+    }
+  }
+  runBtn.addEventListener('click', run);
+
+  init().then(()=>{ runBtn.disabled=false; stEl.textContent='ready'; })
+        .catch(e=>{ stEl.textContent='runtime failed to load'; });
+
+  // install tabs
+  document.querySelectorAll('.tabs button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+      document.querySelectorAll('.install .pane').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      document.querySelector('.pane[data-p="'+b.dataset.t+'"]').classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>

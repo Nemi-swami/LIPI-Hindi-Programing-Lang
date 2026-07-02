@@ -1,0 +1,24 @@
+# Phase 17 — Unicode NFC normalization for Devanagari (सामान्यीकृत)
+
+बताओ "== 1. precomposed vs decomposed compare equal after normalize =="
+# "क़" written precomposed (U+0958) vs base क + nukta ़ (U+093C)
+# In source, both forms normalize to the same NFC form at lex time, so two
+# identifiers written differently refer to the SAME variable:
+क़ है 42
+बताओ क़                         # 42  (precomposed in this literal)
+
+बताओ "== 2. सामान्यीकृत builtin returns NFC form =="
+# A precomposed string normalized has length 2 (base + nukta) per nukta char
+स है सामान्यीकृत("क़")
+बताओ स.लम्बाई()                 # 2 — decomposed to क + ़
+जाँचो स.लम्बाई() बराबर 2, "NFC लम्बाई गलत"
+
+बताओ "== 3. plain text unchanged =="
+जाँचो सामान्यीकृत("नमस्ते") बराबर "नमस्ते", "plain बदल गया"
+
+बताओ "== 4. equality after normalize =="
+# normalize both forms → equal
+जाँचो सामान्यीकृत("ड़") बराबर सामान्यीकृत("ड़"), "norm-eq गलत"
+
+बताओ ""
+बताओ "सब परीक्षण पास ✓"

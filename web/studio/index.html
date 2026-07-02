@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LIPI Studio</title>
+<style>
+  :root {
+    --bg: #1e1e1e; --bg2: #252526; --bg3: #2d2d30; --bd: #3c3c3c;
+    --fg: #cccccc; --fg2: #858585; --acc: #e8a33d; --acc2: #569cd6;
+    --grn: #4ec9a0; --red: #f48771;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg); color: var(--fg); overflow: hidden; }
+  #app { display: grid; height: 100vh;
+    grid-template-rows: 36px 1fr 22px;
+    grid-template-columns: 48px 240px 1fr; }
+  /* title bar */
+  #titlebar { grid-column: 1 / 4; display: flex; align-items: center; gap: 8px;
+    background: var(--bg3); border-bottom: 1px solid var(--bd); padding: 0 10px; }
+  #titlebar .brand { font-weight: 600; color: var(--acc); letter-spacing: .5px; }
+  #titlebar .sep { flex: 1; }
+  button.tb { background: #0e639c; color: #fff; border: 0; padding: 5px 12px;
+    border-radius: 3px; cursor: pointer; font-size: 13px; }
+  button.tb:hover { background: #1177bb; }
+  button.tb.ghost { background: transparent; color: var(--fg); border: 1px solid var(--bd); }
+  button.tb.ghost:hover { background: var(--bg2); }
+  /* activity bar */
+  #activity { grid-row: 2 / 3; background: var(--bg3); border-right: 1px solid var(--bd);
+    display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 4px; }
+  #activity .ic { width: 40px; height: 40px; display: grid; place-items: center; cursor: pointer;
+    color: var(--fg2); font-size: 20px; border-left: 2px solid transparent; }
+  #activity .ic.active { color: #fff; border-left-color: var(--acc); }
+  /* sidebar */
+  #sidebar { grid-row: 2 / 3; background: var(--bg2); border-right: 1px solid var(--bd);
+    overflow-y: auto; font-size: 13px; }
+  .side-h { padding: 8px 12px; text-transform: uppercase; font-size: 11px; color: var(--fg2);
+    letter-spacing: .6px; }
+  .file, .sym { padding: 4px 12px 4px 22px; cursor: pointer; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .file:hover, .sym:hover { background: var(--bg3); }
+  .file.active { background: #094771; color: #fff; }
+  .file .x { float: right; color: var(--fg2); }
+  .file .x:hover { color: var(--red); }
+  .sym .k { color: var(--acc2); }
+  /* editor + panel */
+  #main { grid-row: 2 / 3; display: grid; grid-template-rows: 32px 1fr 180px; min-width: 0; }
+  #tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--bd);
+    overflow-x: auto; }
+  .tab { padding: 7px 14px; border-right: 1px solid var(--bd); cursor: pointer; font-size: 13px;
+    color: var(--fg2); white-space: nowrap; }
+  .tab.active { background: var(--bg); color: #fff; border-top: 1px solid var(--acc); }
+  #editor { min-height: 0; }
+  #panel { background: var(--bg2); border-top: 1px solid var(--bd); display: flex; flex-direction: column; min-height: 0; }
+  #panel-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--bd); }
+  #panel-tabs .pt { padding: 5px 14px; cursor: pointer; font-size: 12px; color: var(--fg2); }
+  #panel-tabs .pt.active { color: #fff; border-bottom: 2px solid var(--acc); }
+  #output, #problems { flex: 1; overflow: auto; padding: 8px 12px; font-family: Consolas, monospace;
+    font-size: 13px; white-space: pre-wrap; }
+  #problems { display: none; }
+  .prob { color: var(--red); cursor: pointer; padding: 2px 0; }
+  .dbg-line { background: rgba(255,200,0,0.16); }
+  .dbg-gutter { background: var(--blue); width: 4px !important; margin-left: 3px; }
+  /* status bar */
+  #status { grid-column: 1 / 4; background: #007acc; color: #fff; display: flex; align-items: center;
+    gap: 16px; padding: 0 12px; font-size: 12px; }
+  #status .err { background: var(--red); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="titlebar">
+    <span class="brand">◆ LIPI Studio</span>
+    <button class="tb" id="run">▶ चलाओ (Ctrl+Enter)</button>
+    <button class="tb ghost" id="debug" title="चरण-दर-चरण डिबग: पंक्ति + चर देखें">🐞 डिबग</button>
+    <button class="tb ghost" id="fmt">स्वरूप</button>
+    <button class="tb ghost" id="translit" title="लाइव रोमन इनपुट: QWERTY में टाइप करें, देवनागरी पाएँ">⌨ इनपुट: देवनागरी</button>
+    <button class="tb ghost" id="convert" title="पूरी फ़ाइल को रोमन से देवनागरी में बदलें">A→अ रूपांतर</button>
+    <button class="tb ghost" id="newf">+ नई फ़ाइल</button>
+    <span class="sep"></span>
+    <span id="wasm-status" style="color:var(--fg2);font-size:12px">WASM लोड हो रहा…</span>
+  </div>
+  <div id="activity">
+    <div class="ic active" data-view="files" title="फ़ाइलें">🗎</div>
+    <div class="ic" data-view="symbols" title="रूपरेखा">≡</div>
+  </div>
+  <div id="sidebar"></div>
+  <div id="main">
+    <div id="tabs"></div>
+    <div id="editor"></div>
+    <div id="panel">
+      <div id="panel-tabs">
+        <div class="pt active" data-p="output">आउटपुट</div>
+        <div class="pt" data-p="problems">समस्याएँ <span id="probcount"></span></div>
+      </div>
+      <div id="output"></div>
+      <div id="problems"></div>
+    </div>
+  </div>
+  <div id="status">
+    <span id="st-pos">Ln 1, Col 1</span>
+    <span>LIPI</span>
+    <span id="st-prob">0 समस्याएँ</span>
+    <span style="flex:1"></span>
+    <span>UTF-8</span>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+<script>
+const SAMPLE = `# LIPI Studio में आपका स्वागत है\nविधि नमस्ते(नाम):\n    फल "नमस्ते " + नाम + "!"\n\nबताओ नमस्ते("दुनिया")\n\n# जनित्र (generator)\nविधि गिनती(n):\n    i के लिए n में:\n        उत्पन्न i * i\nबताओ सूची_में(गिनती(5))\n`;
+let wasm = null, editor = null, monacoRef = null;
+let files = JSON.parse(localStorage.getItem('lipi_files') || 'null') || { 'मुख्य.swami': SAMPLE };
+let active = Object.keys(files)[0];
+let view = 'files';
+
+function saveFiles() { localStorage.setItem('lipi_files', JSON.stringify(files)); }
+
+// ── Monaco ──
+const MONACO_VS = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs';
+require.config({ paths: { vs: MONACO_VS } });
+// Cross-origin worker shim — load Monaco workers from the CDN via a proxy blob so
+// language features don't fall back to the main thread (or fail) over http.
+self.MonacoEnvironment = {
+  getWorkerUrl: function () {
+    const code = `self.MonacoEnvironment={baseUrl:'${MONACO_VS}/'};importScripts('${MONACO_VS}/base/worker/workerMain.js');`;
+    return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(code);
+  }
+};
+require(['vs/editor/editor.main'], function () {
+  monacoRef = monaco;
+  monaco.languages.register({ id: 'lipi' });
+  monaco.languages.setMonarchTokensProvider('lipi', {
+    keywords: ['विधि','फल','उत्पन्न','प्रतीक्षा','यदि','अन्यथा','के','लिए','में','जब','तक','बार','करो',
+      'वर्ग','सार','साझा','कोशिश','पकड़ो','फेंको','आयात','वैश्विक','लाम्डा','जाँचो','स्थिर','शुद्ध',
+      'विकल्प','मिलाओ','अभिलेख','साथ','के_रूप_में','बंद','अगला','बताओ','लिखो','है','और','या','नहीं',
+      'सत्य','असत्य','शून्य','तो','बराबर','से','अधिक','कम','में_है','नहीं_है'],
+    tokenizer: {
+      root: [
+        [/।[^।\n]*।/, 'comment'],
+        [/#.*$/, 'comment'],
+        [/"""/, { token: 'string', next: '@mlstring' }],
+        [/"/, { token: 'string', next: '@string' }],
+        [/[0-9०-९]+(\.[0-9०-९]+)?/, 'number'],
+        [/[ऀ-ॿ_a-zA-Z][ऀ-ॿ_a-zA-Z0-9]*/, {
+          cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+        [/[{}()\[\]]/, 'delimiter'],
+        [/[+\-*/%<>=&|^~!:]/, 'operator'],
+      ],
+      string: [ [/[^"]+/, 'string'], [/"/, { token: 'string', next: '@pop' }] ],
+      mlstring: [ [/[^"]+/, 'string'], [/"""/, { token: 'string', next: '@pop' }], [/"/, 'string'] ],
+    }
+  });
+  monaco.editor.defineTheme('lipi-dark', {
+    base: 'vs-dark', inherit: true,
+    rules: [
+      { token: 'keyword', foreground: 'C586C0' },
+      { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+      { token: 'string', foreground: 'CE9178' },
+      { token: 'number', foreground: 'B5CEA8' },
+      { token: 'operator', foreground: 'D4D4D4' },
+    ], colors: {}
+  });
+  monaco.languages.registerCompletionItemProvider('lipi', {
+    provideCompletionItems() {
+      if (!wasm) return { suggestions: [] };
+      const items = JSON.parse(wasm.lipi_completions());
+      return { suggestions: items.map(it => ({
+        label: it.label, insertText: it.label, detail: it.detail,
+        kind: it.kind === 'keyword' ? monaco.languages.CompletionItemKind.Keyword
+                                    : monaco.languages.CompletionItemKind.Function,
+      })) };
+    }
+  });
+  monaco.languages.registerHoverProvider('lipi', {
+    provideHover(model, pos) {
+      if (!wasm) return null;
+      const w = model.getWordAtPosition(pos); if (!w) return null;
+      const doc = wasm.lipi_hover(w.word);
+      if (!doc) return null;
+      return { contents: [{ value: doc }] };
+    }
+  });
+  monaco.languages.registerDocumentFormattingEditProvider('lipi', {
+    provideDocumentFormattingEdits(model) {
+      if (!wasm) return [];
+      const formatted = wasm.lipi_format(model.getValue());
+      return [{ range: model.getFullModelRange(), text: formatted }];
+    }
+  });
+
+  editor = monaco.editor.create(document.getElementById('editor'), {
+    value: files[active], language: 'lipi', theme: 'lipi-dark',
+    fontSize: 14, automaticLayout: true, minimap: { enabled: true },
+    fontFamily: 'Consolas, "Courier New", monospace',
+  });
+  editor.onDidChangeModelContent(() => { files[active] = editor.getValue(); saveFiles(); lint(); renderSymbols(); });
+  editor.onDidChangeCursorPosition(e => {
+    document.getElementById('st-pos').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+  });
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, run);
+  window.editor = editor;
+  // Live Roman→Devanagari: when a word-boundary char is typed, transliterate the
+  // ASCII word just before it. Lets QWERTY users type Hindi as on a phone keyboard.
+  editor.onDidType((ch) => {
+    if (!translitOn || !wasm) return;
+    if (/^[A-Za-z]$/.test(ch)) return;
+    const model = editor.getModel(), pos = editor.getPosition();
+    const line = model.getLineContent(pos.lineNumber);
+    const boundaryIdx = pos.column - 2;
+    if (boundaryIdx < 0) return;
+    const before = line.substring(0, boundaryIdx);
+    const m = before.match(/([A-Za-z]+)$/);
+    if (!m) return;
+    const word = m[1];
+    const dev = wasm.lipi_phonetic(word);
+    if (!dev || dev === word) return;
+    const startCol = boundaryIdx - word.length + 1;
+    const range = new monacoRef.Range(pos.lineNumber, startCol, pos.lineNumber, boundaryIdx + 1);
+    editor.executeEdits('translit', [{ range, text: dev }]);
+  });
+  renderTabs(); renderSidebar();
+});
+let translitOn = false;
+
+// ── WASM ──
+function wasmFail(msg) {
+  const el = document.getElementById('wasm-status');
+  el.textContent = msg; el.style.color = 'var(--red)';
+  const out = document.getElementById('output');
+  if (out) { showPanel('output'); out.textContent = msg; }
+}
+if (location.protocol === 'file:') {
+  wasmFail('⚠ file:// से न खोलें — टर्मिनल में `lipi ide` चलाएँ (WASM को http:// चाहिए)।');
+} else {
+  import('../pkg/lipi.js').then(async (mod) => {
+    await mod.default();
+    wasm = mod; window.wasm = mod;
+    const el = document.getElementById('wasm-status');
+    el.textContent = 'WASM तैयार ✓'; el.style.color = 'var(--grn)';
+    lint(); renderSymbols();
+  }).catch(e => {
+    wasmFail('WASM लोड विफल — `wasm-pack build --target web --out-dir web/pkg --features wasm` चलाएँ। (' + e + ')');
+  });
+}
+
+// ── Actions ──
+function run() {
+  if (!wasm || !editor) return;
+  const out = wasm.run_source(editor.getValue());
+  showPanel('output');
+  document.getElementById('output').textContent = out || '(कोई आउटपुट नहीं)';
+}
+function lint() {
+  if (!wasm || !editor || !monacoRef) return;
+  const diags = JSON.parse(wasm.lipi_diagnostics(editor.getValue()));
+  const markers = diags.map(d => ({
+    severity: monacoRef.MarkerSeverity.Error,
+    message: d.message, startLineNumber: d.line, startColumn: 1,
+    endLineNumber: d.line, endColumn: 200,
+  }));
+  monacoRef.editor.setModelMarkers(editor.getModel(), 'lipi', markers);
+  const pc = diags.length;
+  document.getElementById('probcount').textContent = pc ? `(${pc})` : '';
+  const st = document.getElementById('st-prob');
+  st.textContent = pc + ' समस्याएँ'; st.className = pc ? 'err' : '';
+  const pp = document.getElementById('problems');
+  pp.innerHTML = diags.map(d => `<div class="prob" data-line="${d.line}">⛔ पंक्ति ${d.line}: ${escapeHtml(d.message)}</div>`).join('');
+  pp.querySelectorAll('.prob').forEach(el => el.onclick = () => {
+    editor.revealLineInCenter(+el.dataset.line);
+    editor.setPosition({ lineNumber: +el.dataset.line, column: 1 }); editor.focus();
+  });
+}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── Step debugger (trace replay) ──
+let traceSteps = [], traceIdx = 0, debugDecos = [];
+function debug() {
+  if (!wasm || !editor || !monacoRef) return;
+  let res;
+  try { res = JSON.parse(wasm.lipi_trace(editor.getValue())); }
+  catch (e) { flashStatus('ट्रेस विफल', 'var(--red)'); return; }
+  traceSteps = res.steps || [];
+  traceIdx = 0;
+  showPanel('output');
+  if (!traceSteps.length) {
+    document.getElementById('output').textContent =
+      res.error ? ('त्रुटि: ' + res.error) : '(कोई चरण नहीं — खाली कार्यक्रम?)';
+    return;
+  }
+  renderTrace();
+}
+function renderTrace() {
+  const s = traceSteps[traceIdx];
+  // highlight current line in Monaco
+  debugDecos = editor.deltaDecorations(debugDecos, [{
+    range: new monacoRef.Range(s.line, 1, s.line, 1),
+    options: { isWholeLine: true, className: 'dbg-line',
+               linesDecorationsClassName: 'dbg-gutter' }
+  }]);
+  editor.revealLineInCenter(s.line);
+  const vars = Object.keys(s.vars).map(k =>
+    `<tr><td style="color:var(--blue);padding-right:12px">${escapeHtml(k)}</td>`+
+    `<td>${escapeHtml(s.vars[k])}</td></tr>`).join('') ||
+    '<tr><td style="color:var(--fg2)">(कोई चर नहीं)</td></tr>';
+  const err = traceSteps[traceIdx] && (traceIdx===traceSteps.length-1) && window.__traceErr;
+  document.getElementById('output').innerHTML =
+    `<div style="font-family:sans-serif">
+      <div style="margin-bottom:8px">
+        <button class="tb ghost" onclick="traceStep(-1)">◀ पिछला</button>
+        <button class="tb ghost" onclick="traceStep(1)">अगला ▶</button>
+        <span style="margin-left:12px;color:var(--fg2)">
+          चरण ${traceIdx+1}/${traceSteps.length} · पंक्ति ${s.line} · गहराई ${s.depth}</span>
+      </div>
+      <table style="border-collapse:collapse">${vars}</table>
+    </div>`;
+}
+function traceStep(d) {
+  if (!traceSteps.length) return;
+  traceIdx = Math.max(0, Math.min(traceSteps.length-1, traceIdx+d));
+  renderTrace();
+}
+window.traceStep = traceStep;
+
+// ── Tabs / files ──
+function renderTabs() {
+  const t = document.getElementById('tabs'); t.innerHTML = '';
+  Object.keys(files).forEach(name => {
+    const d = document.createElement('div');
+    d.className = 'tab' + (name === active ? ' active' : '');
+    d.textContent = name; d.onclick = () => switchFile(name);
+    t.appendChild(d);
+  });
+}
+function switchFile(name) {
+  if (editor) files[active] = editor.getValue();
+  active = name;
+  if (editor) editor.setValue(files[name] || '');
+  renderTabs(); renderSidebar(); lint();
+}
+function renderSidebar() { view === 'files' ? renderFiles() : renderSymbols(); }
+function renderFiles() {
+  const s = document.getElementById('sidebar');
+  s.innerHTML = '<div class="side-h">फ़ाइलें (FILES)</div>';
+  Object.keys(files).forEach(name => {
+    const d = document.createElement('div');
+    d.className = 'file' + (name === active ? ' active' : '');
+    d.innerHTML = `🗎 ${name} <span class="x" title="हटाएँ">✕</span>`;
+    d.onclick = (e) => {
+      if (e.target.classList.contains('x')) {
+        if (Object.keys(files).length > 1) { delete files[name]; saveFiles();
+          if (active === name) active = Object.keys(files)[0];
+          if (editor) editor.setValue(files[active]); renderTabs(); renderFiles(); }
+      } else switchFile(name);
+    };
+    s.appendChild(d);
+  });
+}
+function renderSymbols() {
+  if (view !== 'symbols') return;
+  const s = document.getElementById('sidebar');
+  s.innerHTML = '<div class="side-h">रूपरेखा (OUTLINE)</div>';
+  if (!wasm || !editor) return;
+  const syms = JSON.parse(wasm.lipi_symbols(editor.getValue()));
+  syms.forEach(sym => {
+    const d = document.createElement('div'); d.className = 'sym';
+    d.innerHTML = `<span class="k">${sym.kind === 'class' ? 'वर्ग' : 'विधि'}</span> ${sym.name}`;
+    d.onclick = () => { editor.revealLineInCenter(sym.line);
+      editor.setPosition({ lineNumber: sym.line, column: 1 }); editor.focus(); };
+    s.appendChild(d);
+  });
+}
+function showPanel(p) {
+  document.querySelectorAll('#panel-tabs .pt').forEach(t => t.classList.toggle('active', t.dataset.p === p));
+  document.getElementById('output').style.display = p === 'output' ? 'block' : 'none';
+  document.getElementById('problems').style.display = p === 'problems' ? 'block' : 'none';
+}
+
+function flashStatus(msg, color) {
+  const el = document.getElementById('wasm-status');
+  const prev = el.textContent, prevC = el.style.color;
+  el.textContent = msg; el.style.color = color;
+  setTimeout(() => { el.textContent = prev; el.style.color = prevC; }, 2200);
+}
+document.getElementById('run').onclick = run;
+document.getElementById('debug').onclick = debug;
+document.getElementById('fmt').onclick = () => {
+  if (!editor || !wasm) { flashStatus('WASM तैयार नहीं', 'var(--red)'); return; }
+  const src = editor.getValue();
+  const diags = JSON.parse(wasm.lipi_diagnostics(src));
+  if (diags.length) { flashStatus('स्वरूप विफल — पहले सिंटैक्स त्रुटि ठीक करें', 'var(--red)'); showPanel('problems'); return; }
+  const formatted = wasm.lipi_format(src);
+  if (formatted === src) { flashStatus('पहले से स्वरूपित ✓', 'var(--grn)'); return; }
+  const pos = editor.getPosition();
+  editor.executeEdits('fmt', [{ range: editor.getModel().getFullModelRange(), text: formatted }]);
+  if (pos) editor.setPosition(pos);
+  flashStatus('स्वरूपित ✓', 'var(--grn)');
+};
+document.getElementById('newf').onclick = () => {
+  const name = prompt('नई फ़ाइल का नाम:', 'नया.swami'); if (!name) return;
+  files[name] = ''; saveFiles(); switchFile(name);
+};
+document.getElementById('translit').onclick = () => {
+  translitOn = !translitOn;
+  const b = document.getElementById('translit');
+  b.textContent = translitOn ? '⌨ इनपुट: रोमन ✓' : '⌨ इनपुट: देवनागरी';
+  b.style.background = translitOn ? '#0e639c' : 'transparent';
+  b.style.color = '#fff';
+  flashStatus(translitOn ? 'लाइव रोमन इनपुट चालू — QWERTY में टाइप करें' : 'देवनागरी इनपुट', 'var(--grn)');
+};
+document.getElementById('convert').onclick = () => {
+  if (!editor || !wasm) { flashStatus('WASM तैयार नहीं', 'var(--red)'); return; }
+  const src = editor.getValue();
+  const dev = wasm.lipi_phonetic(src);
+  if (dev === src) { flashStatus('कोई रोमन शब्द नहीं मिला', 'var(--fg2)'); return; }
+  editor.setValue(dev);
+  flashStatus('रूपांतरित ✓ (रोमन → देवनागरी)', 'var(--grn)');
+};
+document.querySelectorAll('#activity .ic').forEach(ic => ic.onclick = () => {
+  document.querySelectorAll('#activity .ic').forEach(x => x.classList.remove('active'));
+  ic.classList.add('active'); view = ic.dataset.view; renderSidebar();
+});
+document.querySelectorAll('#panel-tabs .pt').forEach(pt => pt.onclick = () => showPanel(pt.dataset.p));
+</script>
+</body>
+</html>

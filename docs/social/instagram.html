@@ -1,0 +1,38 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<style>
+  @page { size: 200mm 200mm; margin: 0; }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 200mm; height: 200mm; font-family: "Segoe UI", Arial, sans-serif;
+         background: linear-gradient(135deg, #10131c 0%, #1b2436 100%); color: #f4f4f4;
+         padding: 16mm; display: flex; flex-direction: column; }
+  h1 { font-size: 30pt; letter-spacing: 0.5px; margin-bottom: 2mm; }
+  .sub { color: #8fb7ff; font-size: 13pt; margin-bottom: 8mm; }
+  pre { font-family: Consolas, "Courier New", monospace; background: #05070d; color: #eaeaea;
+        padding: 6mm 7mm; border-radius: 10px; font-size: 15pt; line-height: 1.5; border: 1px solid #2a3550; }
+  .kw { color: #ff9d5c; } .str { color: #7ee787; }
+  .out { margin-top: 5mm; font-family: Consolas, monospace; font-size: 14pt; color: #7ee787; }
+  .out span { color: #8899aa; }
+  .feat { margin-top: auto; display: flex; flex-wrap: wrap; gap: 3mm 6mm; }
+  .feat div { font-size: 12.5pt; color: #d7e2f2; }
+  .feat b { color: #ffce6b; }
+  .brand { margin-top: 6mm; font-size: 11pt; color: #6f7f95; }
+</style></head><body>
+  <h1>Code in Devanagari.</h1>
+  <p class="sub">A real bytecode-VM language, in pure Rust. Runs in your browser.</p>
+
+  <pre><span class="kw">विधि</span> वर्ग(न):
+    <span class="kw">फल</span> न * न
+
+<span class="kw">बताओ</span> मानचित्र([1,2,3,4], वर्ग)</pre>
+  <div class="out"><span>// input → output</span><br>[1, 4, 9, 16]</div>
+
+  <div class="feat">
+    <div><b>›</b> Bytecode VM + WebAssembly</div>
+    <div><b>›</b> Classes, closures, generators, pattern matching</div>
+    <div><b>›</b> C FFI — call any native library</div>
+    <div><b>›</b> HTTPS, JSON, SQL, regex, threads</div>
+    <div><b>›</b> Units, linear algebra, Kalman control</div>
+    <div><b>›</b> Arbitrary-precision integers</div>
+  </div>
+  <div class="brand">LIPI · open source · 60+ passing example programs</div>
+</body></html>

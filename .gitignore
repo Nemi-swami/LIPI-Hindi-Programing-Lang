@@ -1,0 +1,7 @@
+/target
+/.npm-cache
+*.vsix
+*.libc
+# build/release artifacts — these go to GitHub Releases, not the repo
+/dist
+/packaging/stage/lipi.exe
