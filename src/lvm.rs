@@ -1389,6 +1389,8 @@ impl LVM {
                         "भारत.अंतराल"     => crate::antaral::antaral_registry(),
                         "भारत.बाह्य"      => crate::ffi::bahya_registry(),
                         "भारत.तंत्र"      => crate::tantra::tantra_registry(),
+                        "भारत.सुरक्षित"   => crate::https::surakshit_registry(),
+                        "भारत.लॉग"        => crate::lognaad::log_registry(),
                         other => return Err(format!("अज्ञात मॉड्यूल: {}", other)),
                     };
                     for (fname, func) in registry {

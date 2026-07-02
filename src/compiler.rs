@@ -896,6 +896,16 @@ impl Compiler {
                             self.imported_natives.insert(f.into());
                         }
                     }
+                    "भारत.सुरक्षित" => {
+                        for f in ["https_पाओ", "https_भेजो"] {
+                            self.imported_natives.insert(f.into());
+                        }
+                    }
+                    "भारत.लॉग" => {
+                        for f in ["लॉग_स्तर", "लॉग_डिबग", "लॉग_सूचना", "लॉग_चेतावनी", "लॉग_त्रुटि"] {
+                            self.imported_natives.insert(f.into());
+                        }
+                    }
                     _ => {}
                 }
                 self.emit(Opcode::Import(module.clone()));

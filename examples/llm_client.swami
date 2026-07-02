@@ -1,0 +1,44 @@
+# LIPI → LLM — call Claude's Messages API over real TLS.
+#
+# This is the "LLM without limits" architecture: भारत.सुरक्षित gives real HTTPS,
+# भारत.json builds/parses the request and response. No new interpreter feature is
+# needed — the pieces compose. Provider-agnostic: point आधार/मॉडल at any
+# OpenAI/Anthropic-compatible endpoint.
+#
+# Usage:  set your key below (or read it from पर्यावरण), then:  lipi examples/llm_client.swami
+आयात भारत.सुरक्षित
+आयात भारत.json
+
+# ── configuration ─────────────────────────────────────────────────────────────
+कुंजी है पर्यावरण("ANTHROPIC_API_KEY")        # or hard-code your key as a string
+मॉडल है "claude-opus-4-8"                      # default per the API reference
+अधिकतम है 1024
+
+# ── एआई_पूछो: one prompt in, the model's text answer out ─────────────────────
+विधि एआई_पूछो(प्रश्न):
+    यदि कुंजी बराबर शून्य:
+        फेंको "ANTHROPIC_API_KEY पर्यावरण चर सेट करें"
+
+    # Build the Messages API request body as JSON.
+    अनुरोध है क्रमित_कोश()
+    अनुरोध है क्रमित_रखो(अनुरोध, "model", मॉडल)
+    अनुरोध है क्रमित_रखो(अनुरोध, "max_tokens", अधिकतम)
+    संदेश है {"role": "user", "content": प्रश्न}
+    अनुरोध है क्रमित_रखो(अनुरोध, "messages", [संदेश])
+    शरीर है json_लिखो(अनुरोध)
+
+    शीर्षक है {
+        "x-api-key": कुंजी,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+
+    प है https_भेजो("https://api.anthropic.com/v1/messages", शरीर, शीर्षक)
+    यदि प["स्थिति"] != 200:
+        फेंको "API त्रुटि " + प["स्थिति"] + ": " + प["सामग्री"]
+
+    उत्तर है json_पढ़ो(प["सामग्री"])
+    फल उत्तर["content"][0]["text"]
+
+# ── run it ────────────────────────────────────────────────────────────────────
+बताओ एआई_पूछो("नमस्ते! एक वाक्य में भारत के बारे में बताओ।")

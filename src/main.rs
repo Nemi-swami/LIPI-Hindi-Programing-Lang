@@ -22,6 +22,8 @@ mod antaral;
 mod ffi;
 mod tantra;
 mod cbthunk;
+mod https;
+mod lognaad;
 mod opcode;
 mod compiler;
 mod lvm;
