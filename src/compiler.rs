@@ -995,6 +995,32 @@ impl Compiler {
         self.patch(jif, Opcode::JumpIfFalse(end));
     }
 
+    /// Fold a fully-literal numeric subtree to a constant. Add/Sub/Mul + bitwise
+    /// only; Div/FloorDiv/Mod left to runtime so their error/rounding semantics
+    /// are never altered.
+    fn fold_const(e: &Expr) -> Option<f64> {
+        match e {
+            Expr::Number(n) => Some(*n),
+            Expr::Binary { left, op, right } => {
+                let a = Self::fold_const(left)?;
+                let b = Self::fold_const(right)?;
+                let r = match op {
+                    BinOp::Add => a + b,
+                    BinOp::Sub => a - b,
+                    BinOp::Mul => a * b,
+                    BinOp::BitAnd => ((a as i64) & (b as i64)) as f64,
+                    BinOp::BitOr  => ((a as i64) | (b as i64)) as f64,
+                    BinOp::BitXor => ((a as i64) ^ (b as i64)) as f64,
+                    BinOp::LShift => ((a as i64) << (b as i64)) as f64,
+                    BinOp::RShift => ((a as i64) >> (b as i64)) as f64,
+                    _ => return None, // Div/FloorDiv/Mod/And/Or: leave to runtime
+                };
+                if r.is_finite() { Some(r) } else { None }
+            }
+            _ => None,
+        }
+    }
+
     fn compile_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Number(n) => { self.emit(Opcode::Push(LvmValue::Number(*n))); }
@@ -1003,6 +1029,10 @@ impl Compiler {
             Expr::Ident(n)  => { self.emit(Opcode::LoadVar(n.clone())); }
 
             Expr::Binary { left, op, right } => {
+                if let Some(v) = Self::fold_const(expr) {
+                    self.emit(Opcode::Push(LvmValue::Number(v)));
+                    return;
+                }
                 self.compile_expr(left);
                 self.compile_expr(right);
                 self.emit(match op {
