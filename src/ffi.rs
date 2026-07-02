@@ -5,8 +5,10 @@
 //! BLAS/LAPACK, hardware SDKs, OS APIs — anything with a C entry point — so the
 //! language is no longer bounded by its own stdlib. Same idea as Python's ctypes.
 //!
-//! Pure Rust — links only `kernel32` (a system library `std` already links), no
-//! external crates. WASM has no dynamic loader, so every function errors there.
+//! Pure Rust — links only system libraries `std` already links (`kernel32` on
+//! Windows, libdl on Unix), no external crates. Cross-platform: Windows uses
+//! LoadLibrary/GetProcAddress, Linux/macOS use dlopen/dlsym. WASM has no dynamic
+//! loader, so every function errors there.
 //!
 //!   बाह्य_पुस्तकालय(पथ)              → load a library, returns an opaque handle id
 //!   बाह्य_बुलाओ(हैंडल, नाम, ढांचा, …)  → resolve `नाम`, call it, return the result
@@ -33,12 +35,37 @@ use std::cell::{Cell, RefCell};
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::HashMap;
 
+// ── platform loader abstraction: load / resolve / free a shared library ───────
+// Each backend returns raw addresses as usize so the shared call dispatcher and
+// registry are OS-agnostic.
+
 #[cfg(all(not(target_arch = "wasm32"), windows))]
-#[link(name = "kernel32")]
-unsafe extern "system" {
-    fn LoadLibraryA(name: *const u8) -> *mut core::ffi::c_void;
-    fn GetProcAddress(module: *mut core::ffi::c_void, name: *const u8) -> *mut core::ffi::c_void;
-    fn FreeLibrary(module: *mut core::ffi::c_void) -> i32;
+mod plat {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn LoadLibraryA(name: *const u8) -> *mut core::ffi::c_void;
+        fn GetProcAddress(module: *mut core::ffi::c_void, name: *const u8) -> *mut core::ffi::c_void;
+        fn FreeLibrary(module: *mut core::ffi::c_void) -> i32;
+    }
+    /// `cpath`/`cname` must be NUL-terminated. Returns 0 on failure.
+    pub unsafe fn load(cpath: *const u8) -> usize { unsafe { LoadLibraryA(cpath) as usize } }
+    pub unsafe fn resolve(handle: usize, cname: *const u8) -> usize { unsafe { GetProcAddress(handle as *mut core::ffi::c_void, cname) as usize } }
+    pub unsafe fn free(handle: usize) { unsafe { FreeLibrary(handle as *mut core::ffi::c_void); } }
+}
+
+#[cfg(all(not(target_arch = "wasm32"), unix))]
+mod plat {
+    const RTLD_NOW: i32 = 2;
+    // dlopen/dlsym/dlclose live in libdl (Linux) / libSystem (macOS); `dl` links on both.
+    #[link(name = "dl")]
+    unsafe extern "C" {
+        fn dlopen(filename: *const u8, flag: i32) -> *mut core::ffi::c_void;
+        fn dlsym(handle: *mut core::ffi::c_void, symbol: *const u8) -> *mut core::ffi::c_void;
+        fn dlclose(handle: *mut core::ffi::c_void) -> i32;
+    }
+    pub unsafe fn load(cpath: *const u8) -> usize { unsafe { dlopen(cpath, RTLD_NOW) as usize } }
+    pub unsafe fn resolve(handle: usize, cname: *const u8) -> usize { unsafe { dlsym(handle as *mut core::ffi::c_void, cname) as usize } }
+    pub unsafe fn free(handle: usize) { unsafe { dlclose(handle as *mut core::ffi::c_void); } }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -56,23 +83,23 @@ fn cstr(s: &str) -> Vec<u8> {
 
 // ── library load / unload ────────────────────────────────────────────────────
 
-#[cfg(all(not(target_arch = "wasm32"), windows))]
+#[cfg(not(target_arch = "wasm32"))]
 fn lib_open(args: Vec<Value>) -> Result<Value, String> {
     let path = match args.first() {
         Some(Value::Str(s)) => s.clone(),
         _ => return Err("बाह्य_पुस्तकालय(): पथ (वाक्य) अपेक्षित".to_string()),
     };
     let cpath = cstr(&path);
-    let handle = unsafe { LoadLibraryA(cpath.as_ptr()) };
-    if handle.is_null() {
+    let handle = unsafe { plat::load(cpath.as_ptr()) };
+    if handle == 0 {
         return Err(format!("बाह्य_पुस्तकालय(): लोड नहीं हुआ '{path}' (क्या फ़ाइल मौजूद है?)"));
     }
     let id = NEXT_ID.with(|n| { let v = n.get(); n.set(v + 1); v });
-    LIBS.with(|m| m.borrow_mut().insert(id, handle as usize));
+    LIBS.with(|m| m.borrow_mut().insert(id, handle));
     Ok(Value::Number(id as f64))
 }
 
-#[cfg(all(not(target_arch = "wasm32"), windows))]
+#[cfg(not(target_arch = "wasm32"))]
 fn lib_close(args: Vec<Value>) -> Result<Value, String> {
     let id = match args.first() {
         Some(Value::Number(n)) => *n as u64,
@@ -80,14 +107,14 @@ fn lib_close(args: Vec<Value>) -> Result<Value, String> {
     };
     let removed = LIBS.with(|m| m.borrow_mut().remove(&id));
     match removed {
-        Some(h) => { unsafe { FreeLibrary(h as *mut core::ffi::c_void); } Ok(Value::Bool(true)) }
+        Some(h) => { unsafe { plat::free(h); } Ok(Value::Bool(true)) }
         None => Ok(Value::Bool(false)),
     }
 }
 
 // ── the call dispatcher ──────────────────────────────────────────────────────
 
-#[cfg(all(not(target_arch = "wasm32"), windows))]
+#[cfg(not(target_arch = "wasm32"))]
 unsafe fn call_int(f: usize, a: &[usize]) -> usize {
     unsafe {
         use core::mem::transmute;
@@ -103,7 +130,7 @@ unsafe fn call_int(f: usize, a: &[usize]) -> usize {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), windows))]
+#[cfg(not(target_arch = "wasm32"))]
 unsafe fn call_double(f: usize, a: &[f64]) -> f64 {
     unsafe {
         use core::mem::transmute;
@@ -117,7 +144,7 @@ unsafe fn call_double(f: usize, a: &[f64]) -> f64 {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), windows))]
+#[cfg(not(target_arch = "wasm32"))]
 unsafe fn read_cstr(ptr: usize) -> String {
     if ptr == 0 { return String::new(); }
     unsafe {
@@ -129,7 +156,7 @@ unsafe fn read_cstr(ptr: usize) -> String {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), windows))]
+#[cfg(not(target_arch = "wasm32"))]
 fn lib_call(args: Vec<Value>) -> Result<Value, String> {
     let id = match args.first() {
         Some(Value::Number(n)) => *n as u64,
@@ -158,11 +185,10 @@ fn lib_call(args: Vec<Value>) -> Result<Value, String> {
         None => return Err(format!("बाह्य_बुलाओ(): अमान्य हैंडल {id} (पहले बाह्य_पुस्तकालय() से लोड करें)")),
     };
     let cname = cstr(&fname);
-    let proc = unsafe { GetProcAddress(handle as *mut core::ffi::c_void, cname.as_ptr()) };
-    if proc.is_null() {
+    let proc = unsafe { plat::resolve(handle, cname.as_ptr()) };
+    if proc == 0 {
         return Err(format!("बाह्य_बुलाओ(): फलन '{fname}' पुस्तकालय में नहीं मिला"));
     }
-    let proc = proc as usize;
 
     let is_double = arg_spec.chars().any(|c| c == 'd') || ret_spec == 'd';
 
@@ -222,12 +248,7 @@ fn lib_call(args: Vec<Value>) -> Result<Value, String> {
     })
 }
 
-// ── platform fallbacks ───────────────────────────────────────────────────────
-
-#[cfg(all(not(target_arch = "wasm32"), not(windows)))]
-fn ffi_unsupported(_args: Vec<Value>) -> Result<Value, String> {
-    Err("बाह्य: यह FFI बैकएंड अभी केवल Windows पर उपलब्ध है".to_string())
-}
+// ── WASM fallback (no dynamic loader in the sandbox) ─────────────────────────
 
 #[cfg(target_arch = "wasm32")]
 fn ffi_unavailable(_args: Vec<Value>) -> Result<Value, String> {
@@ -235,21 +256,13 @@ fn ffi_unavailable(_args: Vec<Value>) -> Result<Value, String> {
 }
 
 pub fn bahya_registry() -> Registry {
-    #[cfg(all(not(target_arch = "wasm32"), windows))]
+    #[cfg(not(target_arch = "wasm32"))]
     {
+        // Windows + Linux + macOS all use the same dispatcher over the plat backend.
         let list: Vec<(&'static str, NativeFn)> = vec![
             ("बाह्य_पुस्तकालय", lib_open),
             ("बाह्य_बुलाओ", lib_call),
             ("बाह्य_बंद", lib_close),
-        ];
-        list
-    }
-    #[cfg(all(not(target_arch = "wasm32"), not(windows)))]
-    {
-        let list: Vec<(&'static str, NativeFn)> = vec![
-            ("बाह्य_पुस्तकालय", ffi_unsupported),
-            ("बाह्य_बुलाओ", ffi_unsupported),
-            ("बाह्य_बंद", ffi_unsupported),
         ];
         list
     }

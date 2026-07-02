@@ -906,6 +906,19 @@ impl Compiler {
                             self.imported_natives.insert(f.into());
                         }
                     }
+                    "भारत.टोमल" => {
+                        self.imported_natives.insert("toml_पढ़ो".into());
+                        self.imported_natives.insert("ini_पढ़ो".into());
+                    }
+                    "भारत.यामल" => {
+                        self.imported_natives.insert("यामल_पढ़ो".into());
+                    }
+                    "भारत.एक्सएमएल" => {
+                        self.imported_natives.insert("xml_पढ़ो".into());
+                    }
+                    "भारत.तर्कपार्स" => {
+                        self.imported_natives.insert("तर्क_पार्स".into());
+                    }
                     _ => {}
                 }
                 self.emit(Opcode::Import(module.clone()));

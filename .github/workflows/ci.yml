@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Run example regression suite
+        shell: bash
+        run: |
+          bin=target/release/lipi
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          tmp=$(mktemp -d)
+          pass=0; fail=0; failed=""
+          for f in examples/*test*.swami; do
+            case "$f" in *http_test*|*socket*|*llm_client*) continue;; esac
+            args=""
+            case "$f" in *phase17_fs_test*|*phase17_zip_test*) args="$tmp";; esac
+            if "$bin" "$f" $args > /dev/null 2>&1; then
+              pass=$((pass+1))
+            else
+              fail=$((fail+1)); failed="$failed ${f##*/}"
+            fi
+          done
+          echo "PASS=$pass FAIL=$fail"
+          [ -n "$failed" ] && echo "FAILED:$failed"
+          test "$fail" -eq 0
+
+      - name: Rust unit tests
+        run: cargo test --release

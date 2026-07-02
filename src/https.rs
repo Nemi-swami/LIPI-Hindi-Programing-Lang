@@ -156,11 +156,71 @@ fn https_post(args: Vec<Value>) -> Result<Value, String> {
     request("POST", &url, &body, headers, "https_भेजो")
 }
 
-// ── fallbacks ────────────────────────────────────────────────────────────────
+// ── Unix backend: shell out to curl (universally present; provides TLS) ───────
 
-#[cfg(all(not(target_arch = "wasm32"), not(windows)))]
+#[cfg(all(not(target_arch = "wasm32"), unix))]
+fn curl_request(verb: &str, url: &str, body: Option<&str>, extra: Option<&Value>, fname: &str) -> Result<Value, String> {
+    use std::process::Command;
+    if !url.starts_with("https://") {
+        return Err(format!("{fname}(): केवल https:// समर्थित है"));
+    }
+    let mut cmd = Command::new("curl");
+    cmd.arg("-s").arg("-S").arg("-X").arg(verb);
+    let mut has_ct = false;
+    if let Some(Value::Dict(m)) = extra {
+        for (k, v) in m {
+            if k.eq_ignore_ascii_case("content-type") { has_ct = true; }
+            let vs = match v {
+                Value::Str(s) => s.clone(),
+                Value::Number(n) => if n.fract() == 0.0 { format!("{}", *n as i64) } else { format!("{n}") },
+                _ => return Err(format!("{fname}(): शीर्षक मान वाक्य/संख्या होना चाहिए")),
+            };
+            cmd.arg("-H").arg(format!("{k}: {vs}"));
+        }
+    } else if extra.is_some() && !matches!(extra, Some(Value::Nil)) {
+        return Err(format!("{fname}(): शीर्षक एक कोश (Dict) होना चाहिए"));
+    }
+    if let Some(b) = body {
+        if !has_ct { cmd.arg("-H").arg("content-type: application/json"); }
+        cmd.arg("--data-binary").arg(b);
+    }
+    cmd.arg("-w").arg("\nLIPISTATUS:%{http_code}");
+    cmd.arg(url);
+
+    let out = cmd.output().map_err(|e| format!("{fname}(): curl नहीं चला ({e}) — curl इंस्टॉल करें"))?;
+    let s = String::from_utf8_lossy(&out.stdout);
+    let (content, status) = match s.rfind("\nLIPISTATUS:") {
+        Some(i) => (s[..i].to_string(), s[i + 12..].trim().parse::<f64>().unwrap_or(0.0)),
+        None => (s.into_owned(), 0.0),
+    };
+    if status == 0.0 {
+        let err = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("{fname}(): अनुरोध विफल — {}", err.trim()));
+    }
+    let mut d = HashMap::new();
+    d.insert("स्थिति".to_string(), Value::Number(status));
+    d.insert("सामग्री".to_string(), Value::Str(content));
+    Ok(Value::Dict(d))
+}
+
+#[cfg(all(not(target_arch = "wasm32"), unix))]
+fn https_get(args: Vec<Value>) -> Result<Value, String> {
+    let url = match args.first() { Some(Value::Str(s)) => s.clone(), _ => return Err("https_पाओ(): पहला तर्क url (वाक्य) होना चाहिए".to_string()) };
+    curl_request("GET", &url, None, args.get(1), "https_पाओ")
+}
+
+#[cfg(all(not(target_arch = "wasm32"), unix))]
+fn https_post(args: Vec<Value>) -> Result<Value, String> {
+    let url = match args.first() { Some(Value::Str(s)) => s.clone(), _ => return Err("https_भेजो(): पहला तर्क url (वाक्य) होना चाहिए".to_string()) };
+    let body = match args.get(1) { Some(Value::Str(s)) => s.clone(), _ => return Err("https_भेजो(): दूसरा तर्क शरीर (वाक्य) होना चाहिए".to_string()) };
+    curl_request("POST", &url, Some(&body), args.get(2), "https_भेजो")
+}
+
+// ── other-platform fallback (non-Windows, non-Unix) ──────────────────────────
+
+#[cfg(all(not(target_arch = "wasm32"), not(windows), not(unix)))]
 fn https_unsupported(_args: Vec<Value>) -> Result<Value, String> {
-    Err("सुरक्षित: HTTPS बैकएंड अभी केवल Windows (WinHTTP) पर उपलब्ध है".to_string())
+    Err("सुरक्षित: इस मंच पर HTTPS बैकएंड उपलब्ध नहीं है".to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -169,7 +229,8 @@ fn https_unavailable(_args: Vec<Value>) -> Result<Value, String> {
 }
 
 pub fn surakshit_registry() -> Registry {
-    #[cfg(all(not(target_arch = "wasm32"), windows))]
+    // Windows (WinHTTP) and Unix (curl) both provide https_पाओ/https_भेजो.
+    #[cfg(all(not(target_arch = "wasm32"), any(windows, unix)))]
     {
         let list: Vec<(&'static str, NativeFn)> = vec![
             ("https_पाओ", https_get),
@@ -177,7 +238,7 @@ pub fn surakshit_registry() -> Registry {
         ];
         list
     }
-    #[cfg(all(not(target_arch = "wasm32"), not(windows)))]
+    #[cfg(all(not(target_arch = "wasm32"), not(windows), not(unix)))]
     {
         let list: Vec<(&'static str, NativeFn)> = vec![
             ("https_पाओ", https_unsupported),
