@@ -375,8 +375,18 @@ fn run_infer(path: &str) {
         println!("{} : {}", name, ty);
     }
     if !errors.is_empty() {
+        let lines: Vec<&str> = source.lines().collect();
         eprintln!("\n{} प्रकार त्रुटियाँ:", errors.len());
-        for e in &errors { eprintln!("  ✗ {}", e); }
+        for e in &errors {
+            if e.line > 0 {
+                eprintln!("  ✗ पंक्ति {}: {}", e.line, e.message);
+                if let Some(line) = lines.get(e.line - 1) {
+                    eprintln!("    │ {}", line);
+                }
+            } else {
+                eprintln!("  ✗ {}", e.message);
+            }
+        }
         std::process::exit(1);
     }
 }

@@ -1704,15 +1704,22 @@ Landed 60/60 regression-clean, released binary reinstalled to `C:\Users\Nemi\App
 - The arithmetic JIT (`src/jit.rs`) now inlines local `x है expr` bindings at compile time before codegen. A function body like `x है a+b; y है a-b; फल x*y` inlines to `(a+b)*(a-b)` and JIT-compiles — no machine-code changes needed. Reassignment or non-arithmetic bodies fall back to the VM.
 
 ### Hindley-Milner type inference (`src/hm.rs` + `lipi infer`)
-- Real inference engine: type variables (`Type::Var(u32)`), Robinson unification with occurs check, let-generalization, instantiation of quantified schemes.
-- `lipi infer foo.swami` prints inferred types for top-level functions and variables, e.g. `पहचान : (τ3) -> τ3` (polymorphic identity), `जोड़ : (संख्या, संख्या) -> संख्या`.
-- Catches concrete mismatches (`प्रकार मेल नहीं: वाक्य vs संख्या`).
-- **Scope:** functional core only — mutation, classes, dicts-as-records, method dispatch, `Any` for unknowns. Not a replacement for `lipi check` (gradual annotations); it's a separate exploratory tool.
-- 3 unit tests in `hm.rs::tests`.
+- Real inference engine: type variables (`Type::Var(u32)`), Robinson unification with occurs check, let-generalization, instantiation, source line tracking on errors.
+- **Full AST coverage**: all Expr forms + all Stmt forms (Vidhi, Assign, ChainAssign, MultiAssign, Sthir, Fal, Yadi, JabTak, BarKaro, KeeLiye, IndexAssign, SliceAssign, AttrAssign, Varg, TryCatch, Phenko, Saath, Milao, Jancho, Parikshan, Lambda, Await, Membership, Comprehension, MethodCall, Index, Slice, Attr, ListWithSpread, BitNot).
+- **Class typing**: instances get `Type::Instance(className)`, method calls dispatch through per-class method schemes (walking MRO), `A(...)` in a class hierarchy gives Instance types unified across parent/child relationships.
+- **Built-in environment**: लम्बाई (polymorphic `∀τ. τ→संख्या`), पूर्णांक/दशमलव/वाक्य/बूल, arithmetic builtins, है_उदाहरण, विशेषताएँ, HOF stubs.
+- **String polymorphism for `+`**: `Str+X` → Str, `List+List` → List, else Num+Num → Num.
+- `lipi infer foo.swami` prints inferred types + line-anchored errors.
+- **Scope caveats**: field access on instances returns Any (no row types); mutation via `है` doesn't tighten types; generator return types are Any. These are documented limits, not bugs.
+- 14 unit tests in `hm.rs::tests` — all pass. Covers polymorphism, class inheritance, comprehensions, lambdas, builtins, line-number carrying on errors.
 
-### Self-hosting proof-of-concept
-- `examples/selfhost_lexer.swami` — a working LIPI-in-LIPI tokenizer for arithmetic (numbers, identifiers, `+ - * / = ( )`). Verified: tokenizes `"क = ४२ + (7 * ब)"` into 9 correct tokens.
-- `docs/BOOTSTRAP.md` — honest bootstrap plan: 5 stages, 3–5 months of solo work for stages 1–4, another 6–12 months for stage 5. Sets scope explicitly.
+### Short-circuit `और`/`या` (2026-07-13)
+- Compiler emits `Dup + JumpIfFalse + Pop + right` for `और`, mirror for `या`. Was previously eager (both sides always evaluated). Fixes patterns like `जब तक (i से कम len) और (arr[i] > 0):` that previously would out-of-bounds even when the length guard was false. Required for the self-hosted lexer/parser to run.
+
+### Self-hosting — Stages 1 and 2 complete
+- **Stage 1**: `examples/selfhost_lexer_full.swami` — full LIPI-in-LIPI tokenizer. Keywords table (49 keywords), string literals with escapes (`\n\t\"\\`), all operators (single- and two-char), hex/oct/bin/decimal/scientific numbers, ASCII and Devanagari digits, `#` and `।...।` comments, Python-style INDENT/DEDENT, line number tracking. Verified tokenizes real LIPI functions with correct block structure.
+- **Stage 2**: `examples/selfhost_parser.swami` — recursive-descent parser in LIPI. Full expression precedence (या → और → तुलना → योग → गुणा → एकल → प्राथमिक), statements (assign, बताओ, फल, यदि/अन्यथा, जब तक, विधि, calls, lists). Produces tagged Dict AST. Uses global parser state (LIPI dicts are copy-on-write, so state can't thread through a shared dict). Verified: parses a function + assignment + if-statement into correct AST.
+- **Stages 3–4 remaining**: bytecode emission + round-trip. `docs/BOOTSTRAP.md` documents them honestly — 3–5 months of remaining work for stages 3–4, another 6–12 months for stage 5 (LVM in LIPI).
 
 ### Mixins (multiple inheritance)
 - `वर्ग C(A, B, ...)` — comma-separated parent list. `AST::Varg.parents: Vec<String>` (was `parent: Option<String>`).

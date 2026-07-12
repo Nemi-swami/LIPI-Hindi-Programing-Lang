@@ -1062,6 +1062,26 @@ impl Compiler {
                     self.emit(Opcode::Push(LvmValue::Number(v)));
                     return;
                 }
+                if matches!(op, BinOp::And) {
+                    self.compile_expr(left);
+                    self.emit(Opcode::Dup);
+                    let jf = self.emit(Opcode::JumpIfFalse(0));
+                    self.emit(Opcode::Pop);
+                    self.compile_expr(right);
+                    let end = self.here();
+                    self.patch(jf, Opcode::JumpIfFalse(end));
+                    return;
+                }
+                if matches!(op, BinOp::Or) {
+                    self.compile_expr(left);
+                    self.emit(Opcode::Dup);
+                    let jt = self.emit(Opcode::JumpIfTrue(0));
+                    self.emit(Opcode::Pop);
+                    self.compile_expr(right);
+                    let end = self.here();
+                    self.patch(jt, Opcode::JumpIfTrue(end));
+                    return;
+                }
                 self.compile_expr(left);
                 self.compile_expr(right);
                 self.emit(match op {
@@ -1076,8 +1096,7 @@ impl Compiler {
                     BinOp::BitXor => Opcode::BitXor,
                     BinOp::LShift => Opcode::LShift,
                     BinOp::RShift => Opcode::RShift,
-                    BinOp::And    => Opcode::And,
-                    BinOp::Or     => Opcode::Or,
+                    BinOp::And | BinOp::Or => unreachable!(),
                 });
             }
 
