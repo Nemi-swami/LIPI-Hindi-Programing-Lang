@@ -1,0 +1,59 @@
+{
+  "name": "lipi-studio-desktop",
+  "productName": "LIPI Studio",
+  "version": "0.3.0",
+  "description": "Standalone native desktop IDE for the LIPI programming language (Devanagari syntax, bytecode VM).",
+  "author": "LIPI",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis portable",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.lipi.studio",
+    "productName": "LIPI Studio",
+    "directories": { "output": "release" },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      { "from": "bin", "to": "bin", "filter": ["**/*"] }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "swami",
+        "name": "LIPI Source",
+        "description": "LIPI program",
+        "icon": "assets/icon.ico",
+        "role": "Editor"
+      },
+      { "ext": "roman", "name": "LIPI Roman", "icon": "assets/icon.ico", "role": "Editor" },
+      { "ext": "vani",  "name": "LIPI Phonetic", "icon": "assets/icon.ico", "role": "Editor" }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LIPI Studio"
+    },
+    "mac": { "target": ["dmg"], "icon": "assets/icon.icns", "category": "public.app-category.developer-tools" },
+    "linux": { "target": ["AppImage"], "icon": "assets/icon.png", "category": "Development" }
+  }
+}
