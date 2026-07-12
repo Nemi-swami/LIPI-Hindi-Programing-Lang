@@ -89,7 +89,7 @@ pub struct LVM {
     globals: HashMap<String, Value>,
     call_frames: Vec<Frame>,
     functions: HashMap<String, FuncDef>,
-    class_parents: HashMap<String, String>,
+    class_parents: HashMap<String, Vec<String>>,
     native_fns: HashMap<String, crate::bharat_stdlib::NativeFn>,
     try_stack: Vec<TryFrame>,
     /// Typed error value in flight (Phase 17A) — set by Throw, consumed by the
@@ -191,7 +191,6 @@ impl LVM {
         vm.native_fns.insert("पूर्ण_है".into(), builtin_purna_hai);
         // Type inspection
         vm.native_fns.insert("प्रकार".into(), builtin_prakar);
-        vm.native_fns.insert("है_उदाहरण".into(), builtin_hai_udaharan);
         vm.native_fns.insert("विशेषताएँ".into(), builtin_visheshtaayen);
         vm.native_fns.insert("वर्ग_का".into(), builtin_varg_ka);
         // String formatting
@@ -257,11 +256,9 @@ impl LVM {
 
     /// Find a method `Class::method`, walking the inheritance chain (Phase 17).
     fn lookup_method(&self, class: &str, method: &str) -> Option<crate::opcode::FuncDef> {
-        let mut search = Some(class.to_string());
-        while let Some(cls) = search {
+        for cls in self.mro(class) {
             let key = format!("{}::{}", cls, method);
             if let Some(f) = self.functions.get(&key) { return Some(f.clone()); }
-            search = self.class_parents.get(&cls).cloned();
         }
         None
     }
@@ -505,14 +502,31 @@ impl LVM {
     /// Walk the inheritance chain from `class` upward (inclusive) looking for
     /// `target`. वर्ग X(त्रुटि): records त्रुटि as a parent like any other class.
     fn err_chain_contains(&self, class: &str, target: &str) -> bool {
-        let mut cur = class;
-        loop {
+        if class == target { return true; }
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut stack: Vec<String> = vec![class.to_string()];
+        while let Some(cur) = stack.pop() {
+            if !seen.insert(cur.clone()) { continue; }
             if cur == target { return true; }
-            match self.class_parents.get(cur) {
-                Some(parent) => cur = parent.as_str(),
-                None => return false,
+            if let Some(parents) = self.class_parents.get(&cur) {
+                for p in parents { stack.push(p.clone()); }
             }
         }
+        false
+    }
+
+    fn mro(&self, class: &str) -> Vec<String> {
+        let mut order: Vec<String> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut stack: Vec<String> = vec![class.to_string()];
+        while let Some(cur) = stack.pop() {
+            if !seen.insert(cur.clone()) { continue; }
+            order.push(cur.clone());
+            if let Some(parents) = self.class_parents.get(&cur) {
+                for p in parents.iter().rev() { stack.push(p.clone()); }
+            }
+        }
+        order
     }
 
     pub fn run(&mut self, program: &CompiledProgram) -> Result<(), String> {
@@ -1102,19 +1116,16 @@ impl LVM {
                         return Ok(false);
                     }
 
-                    // Constructor: walk parent chain for inherited बनाओ
                     if name.ends_with("::बनाओ") {
                         let class = name.trim_end_matches("::बनाओ").to_string();
                         let inherited = {
-                            let mut search = self.class_parents.get(&class).cloned();
                             let mut found = None;
-                            while let Some(parent) = search {
+                            for parent in self.mro(&class).into_iter().skip(1) {
                                 let key = format!("{}::बनाओ", parent);
                                 if let Some(f) = self.functions.get(&key).cloned() {
                                     found = Some(f);
                                     break;
                                 }
-                                search = self.class_parents.get(&parent).cloned();
                             }
                             found
                         };
@@ -1309,6 +1320,17 @@ impl LVM {
                         }
                         self.stack.push(result);
                     }
+                    else if name == "है_उदाहरण" && argc == 2 {
+                        let target = match &args[1] {
+                            Value::Str(s) => s.clone(),
+                            other => return Err(format!("है_उदाहरण(): दूसरा तर्क वाक्य चाहिए, मिला: {}", other)),
+                        };
+                        let ok = match &args[0] {
+                            Value::Instance { class, .. } => self.mro(class).iter().any(|c| c == &target),
+                            _ => false,
+                        };
+                        self.stack.push(Value::Bool(ok));
+                    }
                     else if name == "विधियाँ_का" && argc == 1 {
                         let class = match &args[0] {
                             Value::Str(s) => s.clone(),
@@ -1379,15 +1401,13 @@ impl LVM {
                             Some((f, HashMap::new()))
                         } else if name.ends_with("::बनाओ") {
                             let class = name.trim_end_matches("::बनाओ").to_string();
-                            let mut search = self.class_parents.get(&class).cloned();
                             let mut found = None;
-                            while let Some(parent) = search {
+                            for parent in self.mro(&class).into_iter().skip(1) {
                                 let key = format!("{}::बनाओ", parent);
                                 if let Some(f) = self.functions.get(&key).cloned() {
                                     found = Some((f, HashMap::new()));
                                     break;
                                 }
-                                search = self.class_parents.get(&parent).cloned();
                             }
                             found
                         } else {
@@ -1552,12 +1572,10 @@ impl LVM {
                         other => return Err(format!("कीवर्ड तर्क विधि कॉल '{}' पर असमर्थित: {}", method, other)),
                     };
                     let func = {
-                        let mut search = Some(class_name.clone());
                         let mut found = None;
-                        while let Some(cls) = search {
+                        for cls in self.mro(&class_name) {
                             let key = format!("{}::{}", cls, method);
                             if let Some(f) = self.functions.get(&key).cloned() { found = Some(f); break; }
-                            search = self.class_parents.get(&cls).cloned();
                         }
                         found
                     };
@@ -1594,9 +1612,8 @@ impl LVM {
                     if let Value::Instance { ref class, .. } = obj {
                         let class_name = class.clone();
                         let (func, deco): (Option<FuncDef>, Option<Value>) = {
-                            let mut search = Some(class_name.clone());
                             let mut found = (None, None);
-                            while let Some(cls) = search {
+                            for cls in self.mro(&class_name) {
                                 let dkey = format!("__cls_deco_{}_{}__", cls, method);
                                 if let Some(v) = self.globals.get(&dkey).cloned() {
                                     found = (None, Some(v));
@@ -1607,7 +1624,6 @@ impl LVM {
                                     found = (Some(f), None);
                                     break;
                                 }
-                                search = self.class_parents.get(&cls).cloned();
                             }
                             found
                         };
@@ -3384,20 +3400,6 @@ fn builtin_prakar(args: Vec<Value>) -> Result<Value, String> {
         Some(Value::Generator(_))      => "जनित्र",
     };
     Ok(Value::Str(name.to_string()))
-}
-
-fn builtin_hai_udaharan(args: Vec<Value>) -> Result<Value, String> {
-    if args.len() != 2 {
-        return Err("है_उदाहरण(obj, \"नाम\") को 2 तर्क चाहिए".into());
-    }
-    let target = match &args[1] {
-        Value::Str(s) => s.clone(),
-        other => return Err(format!("है_उदाहरण(): दूसरा तर्क वाक्य चाहिए, मिला: {}", other)),
-    };
-    match &args[0] {
-        Value::Instance { class, .. } => Ok(Value::Bool(class == &target)),
-        _ => Ok(Value::Bool(false)),
-    }
 }
 
 fn builtin_visheshtaayen(args: Vec<Value>) -> Result<Value, String> {

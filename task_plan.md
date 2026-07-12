@@ -219,7 +219,7 @@ Landed 60/60 regression-clean, release binary reinstalled.
 - [ ] P4 XL **ML tensor library** — native tensors, autograd, training loop
 - [ ] P4 XL **Proof system** — formal verification (like Lean/Coq) using Nyaya logic
 - [ ] P4 XL **Dependent types** — values as types, total correctness
-- [ ] P2 M  **Mixins / multiple inheritance** — genuine outstanding language feature (not yet done)
+- [x] P2 M  **Mixins / multiple inheritance** — DONE 2026-07-13. `वर्ग C(A, B, ...)` — depth-first left-to-right MRO in `LVM::mro()`; `है_उदाहरण` walks it. Serializer pairwise-encodes each parent so v3/v4 `.libc` loaders stay compatible
 - [ ] P2 S  **Weak references** — cache-friendly refs without preventing GC
 
 ---

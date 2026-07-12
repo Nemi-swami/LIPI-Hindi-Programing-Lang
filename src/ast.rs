@@ -58,7 +58,7 @@ pub enum Stmt {
 
     /// वर्ग name[(parent)]: [methods]  — class definition (Phase 6/9).
     /// is_abstract (Phase 17): `सार वर्ग` — cannot be instantiated directly.
-    Varg { name: String, parent: Option<String>, methods: Vec<Stmt>, is_abstract: bool },
+    Varg { name: String, parents: Vec<String>, methods: Vec<Stmt>, is_abstract: bool },
 
     /// obj.field है val  — attribute assignment (Phase 6)
     AttrAssign { obj: String, field: String, val: Expr },

@@ -500,7 +500,7 @@ impl Parser {
             is_static: false,
             ret_type: None,
         };
-        Ok(Stmt::Varg { name, parent: None, methods: vec![ctor], is_abstract: false })
+        Ok(Stmt::Varg { name, parents: Vec::new(), methods: vec![ctor], is_abstract: false })
     }
 
     /// साथ <expr> के_रूप_में <नाम>: <block>  — context manager (Phase 17)
@@ -539,16 +539,23 @@ impl Parser {
         } else { false };
         self.expect_kind(TokenKind::Varg)?; // consume वर्ग
         let name = self.expect_ident()?;
-        let parent = if self.check_kind(TokenKind::LParen) {
+        let parents = if self.check_kind(TokenKind::LParen) {
             self.advance();
-            let p = self.expect_ident()?;
+            let mut list = Vec::new();
+            if !self.check_kind(TokenKind::RParen) {
+                loop {
+                    list.push(self.expect_ident()?);
+                    if !self.check_kind(TokenKind::Comma) { break; }
+                    self.advance();
+                }
+            }
             self.expect_kind(TokenKind::RParen)?;
-            Some(p)
-        } else { None };
+            list
+        } else { Vec::new() };
         self.expect_kind(TokenKind::Colon)?;
         self.skip_newlines();
         let methods = self.block()?;
-        Ok(Stmt::Varg { name, parent, methods, is_abstract })
+        Ok(Stmt::Varg { name, parents, methods, is_abstract })
     }
 
     /// कोशिश: body + one or more पकड़ो clauses (Phase 17A typed exceptions).

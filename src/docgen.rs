@@ -37,12 +37,13 @@ pub fn generate(src: &str, title: &str) -> String {
                     out.push_str("\n\n");
                 }
             }
-            Stmt::Varg { name, parent, methods, is_abstract } => {
+            Stmt::Varg { name, parents, methods, is_abstract } => {
                 any = true;
                 let kw = if *is_abstract { "सार वर्ग" } else { "वर्ग" };
-                let heading = match parent {
-                    Some(p) => format!("{} `{}` ( {} से )", kw, name, p),
-                    None => format!("{} `{}`", kw, name),
+                let heading = if parents.is_empty() {
+                    format!("{} `{}`", kw, name)
+                } else {
+                    format!("{} `{}` ( {} से )", kw, name, parents.join(", "))
                 };
                 out.push_str(&format!("## {}\n\n", heading));
                 let doc = preceding_comments(&lines, line);

@@ -97,7 +97,7 @@ pub struct Compiler {
     known_classes: HashSet<String>,
     /// Classes declared `सार वर्ग` — constructor calls error (Phase 17)
     abstract_classes: HashSet<String>,
-    class_parents: HashMap<String, String>,
+    class_parents: HashMap<String, Vec<String>>,
     break_sites: Vec<Vec<usize>>,
     continue_stack: Vec<(Option<usize>, Vec<usize>)>,
     /// Nesting depth inside विधि bodies — used for tail-call detection (Phase 15)
@@ -162,11 +162,11 @@ impl Compiler {
         let mut c = Compiler::new();
         // Pre-pass: collect class names, parents, abstract flag, static methods
         for stmt in stmts {
-            if let Stmt::Varg { name, parent, is_abstract, .. } = unwrap_located(stmt) {
+            if let Stmt::Varg { name, parents, is_abstract, .. } = unwrap_located(stmt) {
                 c.known_classes.insert(name.clone());
                 if *is_abstract { c.abstract_classes.insert(name.clone()); }
-                if let Some(p) = parent {
-                    c.class_parents.insert(name.clone(), p.clone());
+                if !parents.is_empty() {
+                    c.class_parents.insert(name.clone(), parents.clone());
                 }
             }
         }
@@ -636,10 +636,10 @@ impl Compiler {
                                 // mini pre-pass: register imported classes so their
                                 // constructor calls compile correctly
                                 for s in &stmts {
-                                    if let Stmt::Varg { name, parent, is_abstract, .. } = unwrap_located(s) {
+                                    if let Stmt::Varg { name, parents, is_abstract, .. } = unwrap_located(s) {
                                         self.known_classes.insert(name.clone());
                                         if *is_abstract { self.abstract_classes.insert(name.clone()); }
-                                        if let Some(p) = parent { self.class_parents.insert(name.clone(), p.clone()); }
+                                        if !parents.is_empty() { self.class_parents.insert(name.clone(), parents.clone()); }
                                     }
                                 }
                                 for s in &stmts { self.compile_stmt(s); }
@@ -661,10 +661,10 @@ impl Compiler {
                                 let mut names = HashSet::new();
                                 for s in &stmts {
                                     match unwrap_located(s) {
-                                        Stmt::Varg { name, parent, is_abstract, .. } => {
+                                        Stmt::Varg { name, parents, is_abstract, .. } => {
                                             self.known_classes.insert(name.clone());
                                             if *is_abstract { self.abstract_classes.insert(name.clone()); }
-                                            if let Some(p) = parent { self.class_parents.insert(name.clone(), p.clone()); }
+                                            if !parents.is_empty() { self.class_parents.insert(name.clone(), parents.clone()); }
                                         }
                                         Stmt::Vidhi { name, .. } => { names.insert(name.clone()); }
                                         _ => {}

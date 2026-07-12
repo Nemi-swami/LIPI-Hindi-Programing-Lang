@@ -137,10 +137,14 @@ pub fn save(program: &CompiledProgram, path: &str) -> Result<(), String> {
     }
 
     // v3: class inheritance table (child → parent), sorted for determinism
-    let mut parents: Vec<(&String, &String)> = program.class_parents.iter().collect();
-    parents.sort_by_key(|(c, _)| c.as_str());
-    write_u32(&mut buf, parents.len() as u32);
-    for (child, parent) in parents {
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    let mut entries: Vec<(&String, &Vec<String>)> = program.class_parents.iter().collect();
+    entries.sort_by_key(|(c, _)| c.as_str());
+    for (child, ps) in entries {
+        for p in ps { pairs.push((child.clone(), p.clone())); }
+    }
+    write_u32(&mut buf, pairs.len() as u32);
+    for (child, parent) in &pairs {
         write_str(&mut buf, child);
         write_str(&mut buf, parent);
     }
@@ -204,13 +208,13 @@ pub fn load(path: &str) -> Result<CompiledProgram, String> {
     }
 
     // v3: class inheritance table — v2 files have none (inheritance broke in old .libc)
-    let mut class_parents = HashMap::new();
+    let mut class_parents: HashMap<String, Vec<String>> = HashMap::new();
     if version >= 3 {
         let parent_count = read_u32(&data, &mut pos)? as usize;
         for _ in 0..parent_count {
             let child  = read_str(&data, &mut pos)?;
             let parent = read_str(&data, &mut pos)?;
-            class_parents.insert(child, parent);
+            class_parents.entry(child).or_default().push(parent);
         }
     }
 

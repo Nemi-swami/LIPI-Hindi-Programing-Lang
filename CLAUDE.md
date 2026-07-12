@@ -1697,6 +1697,14 @@ Landed 60/60 regression-clean, released binary reinstalled to `C:\Users\Nemi\App
 - Bitwise ops error if `|val| > 2^53` instead of silently truncating — use `भारत.बड़ी` for arbitrary precision
 - Property-setter footgun: if `__सेट_<f>__` returns Nil (missing `फल यह`), the setter's mutated `यह` local is substituted instead of clobbering the caller's variable. New `Frame.on_nil_push_local: Option<String>` honored by `Opcode::Return`
 
+### Mixins (multiple inheritance)
+- `वर्ग C(A, B, ...)` — comma-separated parent list. `AST::Varg.parents: Vec<String>` (was `parent: Option<String>`).
+- `class_parents: HashMap<String, Vec<String>>` in `CompiledProgram` and `LVM`.
+- Method dispatch walks the MRO via `LVM::mro()` — depth-first left-to-right, each class first-occurrence-wins. Not C3-compliant but simple and predictable.
+- `err_chain_contains` and constructor-parent walks rewritten to iterate the MRO.
+- `है_उदाहरण(obj, "वर्ग")` now walks the MRO — reports true for any ancestor.
+- Serializer: pairwise encoding preserved (child, parent) — a multi-parent class writes N pairs; loader appends to the `Vec<String>`. Backward-compatible with v3/v4 `.libc` files.
+
 ### Async — status confirmed
 Async/await ALREADY WORKS. `प्रतीक्षा`, `सोओ(ms)`, `चलाओ(gen)`, `इकट्ठा(g1, g2, ...)` — no `असंकालिक` keyword needed; a function using `प्रतीक्षा` is implicitly a coroutine. Verified with a 100ms/50ms two-task test — out-of-order completion confirms real concurrency.
 

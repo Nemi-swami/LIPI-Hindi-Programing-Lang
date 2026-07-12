@@ -49,7 +49,7 @@ pub struct CompiledProgram {
     pub lines: Vec<u32>,
     pub functions: HashMap<String, FuncDef>,
     /// Parent class lookup for inheritance: child → parent class name
-    pub class_parents: HashMap<String, String>,
+    pub class_parents: HashMap<String, Vec<String>>,
 }
 
 /// LIPI VM instruction set.
