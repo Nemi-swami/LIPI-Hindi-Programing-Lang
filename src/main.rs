@@ -30,6 +30,7 @@ mod xmlparse;
 mod argparse;
 mod daak;
 mod jit;
+mod hm;
 mod opcode;
 mod compiler;
 mod lvm;
@@ -364,7 +365,22 @@ fn run_check(path: &str) {
     std::process::exit(1);
 }
 
-/// `lipi doc foo.swami` → emit Markdown documentation to stdout
+fn run_infer(path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("फ़ाइल नहीं खुली '{}': {e}", path); std::process::exit(2); }
+    };
+    let (results, errors) = hm::infer_file(&source);
+    for (name, ty) in &results {
+        println!("{} : {}", name, ty);
+    }
+    if !errors.is_empty() {
+        eprintln!("\n{} प्रकार त्रुटियाँ:", errors.len());
+        for e in &errors { eprintln!("  ✗ {}", e); }
+        std::process::exit(1);
+    }
+}
+
 fn run_doc(path: &str) {
     let source = match std::fs::read_to_string(path) {
         Ok(s) => s,
@@ -547,8 +563,9 @@ fn main() {
         // lipi lint foo.swami → report linter warnings (Phase 17D)
         [_, cmd, path] if cmd == "lint" => run_lint(path),
 
-        // lipi check foo.swami → static type checker (Phase 18 #7)
         [_, cmd, path] if cmd == "check" => run_check(path),
+
+        [_, cmd, path] if cmd == "infer" => run_infer(path),
 
         // lipi doc foo.swami  → emit Markdown documentation (Phase 17D)
         [_, cmd, path] if cmd == "doc" => run_doc(path),

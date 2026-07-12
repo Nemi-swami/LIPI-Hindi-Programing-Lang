@@ -208,10 +208,10 @@ Landed 60/60 regression-clean, release binary reinstalled.
 ## PHASE 21 — Advanced / Surpass (3–5+ Years)
 > Goal: Genuinely better than Python in specific areas
 
-- [~] P4 XL **JIT compiler** — arithmetic-only JIT landed in Phase 19; extending to more opcodes needs weeks
-- [ ] P4 XL **Full type inference** — Hindley-Milner, no annotations needed
+- [~] P4 XL **JIT compiler** — arithmetic JIT extended 2026-07-13 to multi-statement bodies via inline-substitution pass (`x है a+b; y है a-b; फल x*y` → `(a+b)*(a-b)` JIT'd). Further extension (division with runtime zero-check, control flow, comparison ops) still weeks
+- [~] P4 XL **Full type inference** — Hindley-Milner skeleton landed 2026-07-13 (`src/hm.rs`, `lipi infer`): type vars, Robinson unification, occurs check, let-generalization, instantiation. Handles functional core; mutation/classes/method-dispatch out of scope. Not full production HM
 - [ ] P4 XL **Effect system** — track pure/IO/state at compile time
-- [ ] P4 XL **Self-hosting** — LIPI compiler written in LIPI
+- [~] P4 XL **Self-hosting** — Stage 1 (proof-of-concept lexer) landed 2026-07-13 in `examples/selfhost_lexer.swami` (arithmetic subset). Stages 2–4 (parser, compiler, round-trip) are 3–5 months of solo work; see `docs/BOOTSTRAP.md` for the honest plan
 - [ ] P4 XL **Parallel collections** — auto-parallelize map/filter with Rayon
 - [ ] P4 XL **AOT compiler** — compile LIPI → native binary (no runtime needed)
 - [ ] P4 XL **GPU support** — CUDA/Metal/Vulkan tensor ops
@@ -220,7 +220,7 @@ Landed 60/60 regression-clean, release binary reinstalled.
 - [ ] P4 XL **Proof system** — formal verification (like Lean/Coq) using Nyaya logic
 - [ ] P4 XL **Dependent types** — values as types, total correctness
 - [x] P2 M  **Mixins / multiple inheritance** — DONE 2026-07-13. `वर्ग C(A, B, ...)` — depth-first left-to-right MRO in `LVM::mro()`; `है_उदाहरण` walks it. Serializer pairwise-encodes each parent so v3/v4 `.libc` loaders stay compatible
-- [ ] P2 S  **Weak references** — cache-friendly refs without preventing GC
+- [x] P2 S  **Weak references** — DONE 2026-07-13. Registry-based (LIPI has no cycles, so it's a semantic API): `कमजोर(obj)` → id-Dict, `पाओ_कमजोर(ref)` → value or शून्य after `मिटाओ_कमजोर(ref)`
 
 ---
 

@@ -96,21 +96,43 @@ mod x86 {
         }
     }
 
-    /// Machine code for a qualifying function body, or None if it can't be JIT'd.
+    fn inline_expr(e: &Expr, bindings: &HashMap<String, Expr>) -> Expr {
+        match e {
+            Expr::Ident(name) => bindings.get(name).cloned().unwrap_or_else(|| e.clone()),
+            Expr::Binary { left, op, right } => Expr::Binary {
+                left: Box::new(inline_expr(left, bindings)),
+                op: op.clone(),
+                right: Box::new(inline_expr(right, bindings)),
+            },
+            _ => e.clone(),
+        }
+    }
+
     pub(super) fn codegen(params: &[String], body: &[Stmt]) -> Option<Vec<u8>> {
-        // Exactly one statement, a `फल <expr>`.
-        let mut stmts = body.iter().map(unwrap_located);
-        let first = stmts.next()?;
-        if stmts.next().is_some() { return None; }
-        let expr = match first {
-            Stmt::Fal(e) => e,
+        let stmts: Vec<&Stmt> = body.iter().map(unwrap_located).collect();
+        if stmts.is_empty() { return None; }
+        let mut bindings: HashMap<String, Expr> = HashMap::new();
+        let (final_stmt, prelude) = stmts.split_last()?;
+        for s in prelude {
+            match s {
+                Stmt::Assign { name, value, .. } => {
+                    if bindings.contains_key(name) { return None; }
+                    if params.iter().any(|p| p == name) { return None; }
+                    let inlined = inline_expr(value, &bindings);
+                    bindings.insert(name.clone(), inlined);
+                }
+                _ => return None,
+            }
+        }
+        let expr = match final_stmt {
+            Stmt::Fal(e) => inline_expr(e, &bindings),
             _ => return None,
         };
         let mut code = Vec::new();
-        emit(&mut code, expr, params)?;
-        code.extend_from_slice(&[0xF2, 0x0F, 0x10, 0x04, 0x24]); // movsd xmm0, [rsp]
-        code.extend_from_slice(&[0x48, 0x83, 0xC4, 0x08]);       // add rsp, 8
-        code.push(0xC3);                                         // ret
+        emit(&mut code, &expr, params)?;
+        code.extend_from_slice(&[0xF2, 0x0F, 0x10, 0x04, 0x24]);
+        code.extend_from_slice(&[0x48, 0x83, 0xC4, 0x08]);
+        code.push(0xC3);
         Some(code)
     }
 

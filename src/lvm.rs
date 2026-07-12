@@ -106,6 +106,8 @@ pub struct LVM {
     generators: HashMap<u64, GenState>,
     gen_next: u64,
     yielded: bool,
+    weak_refs: HashMap<u64, Value>,
+    weak_next: u64,
     /// When `capture` is true, Print writes here instead of stdout.
     pub output: String,
     capture: bool,
@@ -132,6 +134,8 @@ impl LVM {
             generators: HashMap::new(),
             gen_next: 0,
             yielded: false,
+            weak_refs: HashMap::new(),
+            weak_next: 0,
             output: String::new(),
             capture: false,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1319,6 +1323,35 @@ impl LVM {
                             }
                         }
                         self.stack.push(result);
+                    }
+                    else if name == "कमजोर" && argc == 1 {
+                        let id = self.weak_next;
+                        self.weak_next += 1;
+                        self.weak_refs.insert(id, args[0].clone());
+                        let mut d = HashMap::new();
+                        d.insert("__कमजोर_सूची__".to_string(), Value::Number(id as f64));
+                        self.stack.push(Value::Dict(d));
+                    }
+                    else if name == "पाओ_कमजोर" && argc == 1 {
+                        let id = match &args[0] {
+                            Value::Dict(d) => match d.get("__कमजोर_सूची__") {
+                                Some(Value::Number(n)) => *n as u64,
+                                _ => return Err("पाओ_कमजोर(): अमान्य कमजोर संदर्भ".into()),
+                            },
+                            _ => return Err("पाओ_कमजोर(): कमजोर संदर्भ अपेक्षित".into()),
+                        };
+                        self.stack.push(self.weak_refs.get(&id).cloned().unwrap_or(Value::Nil));
+                    }
+                    else if name == "मिटाओ_कमजोर" && argc == 1 {
+                        let id = match &args[0] {
+                            Value::Dict(d) => match d.get("__कमजोर_सूची__") {
+                                Some(Value::Number(n)) => *n as u64,
+                                _ => return Err("मिटाओ_कमजोर(): अमान्य कमजोर संदर्भ".into()),
+                            },
+                            _ => return Err("मिटाओ_कमजोर(): कमजोर संदर्भ अपेक्षित".into()),
+                        };
+                        let existed = self.weak_refs.remove(&id).is_some();
+                        self.stack.push(Value::Bool(existed));
                     }
                     else if name == "है_उदाहरण" && argc == 2 {
                         let target = match &args[1] {

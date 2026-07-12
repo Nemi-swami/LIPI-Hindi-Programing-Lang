@@ -1697,6 +1697,23 @@ Landed 60/60 regression-clean, released binary reinstalled to `C:\Users\Nemi\App
 - Bitwise ops error if `|val| > 2^53` instead of silently truncating — use `भारत.बड़ी` for arbitrary precision
 - Property-setter footgun: if `__सेट_<f>__` returns Nil (missing `फल यह`), the setter's mutated `यह` local is substituted instead of clobbering the caller's variable. New `Frame.on_nil_push_local: Option<String>` honored by `Opcode::Return`
 
+### Weak references (registry-based)
+- `कमजोर(obj)` returns a Dict `{__कमजोर_सूची__: id}`. `पाओ_कमजोर(ref)` returns the stored value or `शून्य` after `मिटाओ_कमजोर(ref)`. Registry lives on `LVM.weak_refs: HashMap<u64, Value>` — LIPI's clone-tree model has no cycles, so this is a semantic API, not a literal Rust `Weak`.
+
+### JIT extension (multi-statement bodies)
+- The arithmetic JIT (`src/jit.rs`) now inlines local `x है expr` bindings at compile time before codegen. A function body like `x है a+b; y है a-b; फल x*y` inlines to `(a+b)*(a-b)` and JIT-compiles — no machine-code changes needed. Reassignment or non-arithmetic bodies fall back to the VM.
+
+### Hindley-Milner type inference (`src/hm.rs` + `lipi infer`)
+- Real inference engine: type variables (`Type::Var(u32)`), Robinson unification with occurs check, let-generalization, instantiation of quantified schemes.
+- `lipi infer foo.swami` prints inferred types for top-level functions and variables, e.g. `पहचान : (τ3) -> τ3` (polymorphic identity), `जोड़ : (संख्या, संख्या) -> संख्या`.
+- Catches concrete mismatches (`प्रकार मेल नहीं: वाक्य vs संख्या`).
+- **Scope:** functional core only — mutation, classes, dicts-as-records, method dispatch, `Any` for unknowns. Not a replacement for `lipi check` (gradual annotations); it's a separate exploratory tool.
+- 3 unit tests in `hm.rs::tests`.
+
+### Self-hosting proof-of-concept
+- `examples/selfhost_lexer.swami` — a working LIPI-in-LIPI tokenizer for arithmetic (numbers, identifiers, `+ - * / = ( )`). Verified: tokenizes `"क = ४२ + (7 * ब)"` into 9 correct tokens.
+- `docs/BOOTSTRAP.md` — honest bootstrap plan: 5 stages, 3–5 months of solo work for stages 1–4, another 6–12 months for stage 5. Sets scope explicitly.
+
 ### Mixins (multiple inheritance)
 - `वर्ग C(A, B, ...)` — comma-separated parent list. `AST::Varg.parents: Vec<String>` (was `parent: Option<String>`).
 - `class_parents: HashMap<String, Vec<String>>` in `CompiledProgram` and `LVM`.
