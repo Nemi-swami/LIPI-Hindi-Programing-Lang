@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use crate::ast::{Expr, Stmt, BinOp, unwrap_located};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -14,6 +14,7 @@ pub enum Type {
     Instance(String),
     Var(u32),
     Any,
+    Record { fields: BTreeMap<String, Type>, rest: Option<u32> },
 }
 
 impl Type {
@@ -33,6 +34,15 @@ impl Type {
             Type::Instance(name) => name.clone(),
             Type::Var(id) => format!("τ{}", id),
             Type::Any => "कुछ_भी".into(),
+            Type::Record { fields, rest } => {
+                let parts: Vec<String> = fields.iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.pretty()))
+                    .collect();
+                match rest {
+                    Some(r) => format!("{{{} | τ{}}}", parts.join(", "), r),
+                    None => format!("{{{}}}", parts.join(", ")),
+                }
+            }
         }
     }
 }
@@ -96,6 +106,31 @@ impl Inferrer {
                 args.iter().map(|a| self.apply(a)).collect(),
                 Box::new(self.apply(ret)),
             ),
+            Type::Record { fields, rest } => {
+                let applied_fields: BTreeMap<String, Type> = fields.iter()
+                    .map(|(k, v)| (k.clone(), self.apply(v)))
+                    .collect();
+                match rest {
+                    Some(r) => match self.subst.get(r) {
+                        Some(inner) => {
+                            let applied_rest = self.apply(&inner.clone());
+                            match applied_rest {
+                                Type::Record { fields: rf, rest: rr } => {
+                                    let mut merged = applied_fields;
+                                    for (k, v) in rf {
+                                        merged.entry(k).or_insert(v);
+                                    }
+                                    Type::Record { fields: merged, rest: rr }
+                                }
+                                Type::Var(id) => Type::Record { fields: applied_fields, rest: Some(id) },
+                                _ => Type::Record { fields: applied_fields, rest: Some(*r) },
+                            }
+                        }
+                        None => Type::Record { fields: applied_fields, rest: Some(*r) },
+                    }
+                    None => Type::Record { fields: applied_fields, rest: None },
+                }
+            }
             _ => t.clone(),
         }
     }
@@ -105,6 +140,10 @@ impl Inferrer {
             Type::Var(id) => id == v,
             Type::List(t) | Type::Dict(t) => self.occurs(v, &t),
             Type::Fun(args, ret) => args.iter().any(|a| self.occurs(v, a)) || self.occurs(v, &ret),
+            Type::Record { fields, rest } => {
+                fields.values().any(|t| self.occurs(v, t))
+                    || matches!(rest, Some(r) if r == v)
+            }
             _ => false,
         }
     }
@@ -140,7 +179,73 @@ impl Inferrer {
                 for (x, y) in a_args.iter().zip(b_args.iter()) { self.unify(x, y)?; }
                 self.unify(&a_ret, &b_ret)
             }
+            (Type::Record { fields: af, rest: ar }, Type::Record { fields: bf, rest: br }) => {
+                self.unify_records(af, ar, bf, br)
+            }
             (a, b) => Err(format!("प्रकार मेल नहीं: {} vs {}", a.pretty(), b.pretty())),
+        }
+    }
+
+    fn unify_records(
+        &mut self,
+        af: BTreeMap<String, Type>,
+        ar: Option<u32>,
+        bf: BTreeMap<String, Type>,
+        br: Option<u32>,
+    ) -> Result<(), String> {
+        for (k, av) in af.iter() {
+            if let Some(bv) = bf.get(k) { self.unify(av, bv)?; }
+        }
+        let a_only: BTreeMap<String, Type> = af.iter()
+            .filter(|(k, _)| !bf.contains_key(*k))
+            .map(|(k, v)| (k.clone(), v.clone())).collect();
+        let b_only: BTreeMap<String, Type> = bf.iter()
+            .filter(|(k, _)| !af.contains_key(*k))
+            .map(|(k, v)| (k.clone(), v.clone())).collect();
+        match (ar, br) {
+            (None, None) => {
+                if !a_only.is_empty() || !b_only.is_empty() {
+                    let mut missing = Vec::new();
+                    for k in a_only.keys() { missing.push(k.clone()); }
+                    for k in b_only.keys() { missing.push(k.clone()); }
+                    Err(format!("अभिलेख क्षेत्र मेल नहीं: {}", missing.join(", ")))
+                } else { Ok(()) }
+            }
+            (None, Some(rb)) => {
+                if !b_only.is_empty() {
+                    return Err(format!("क्षेत्र नहीं है: {}", b_only.keys().cloned().collect::<Vec<_>>().join(", ")));
+                }
+                let new_rec = Type::Record { fields: a_only, rest: None };
+                if self.occurs(rb, &new_rec) { return Err(format!("प्रकार अनंत — τ{} occurs in record", rb)); }
+                self.subst.insert(rb, new_rec);
+                Ok(())
+            }
+            (Some(ra), None) => {
+                if !a_only.is_empty() {
+                    return Err(format!("क्षेत्र नहीं है: {}", a_only.keys().cloned().collect::<Vec<_>>().join(", ")));
+                }
+                let new_rec = Type::Record { fields: b_only, rest: None };
+                if self.occurs(ra, &new_rec) { return Err(format!("प्रकार अनंत — τ{} occurs in record", ra)); }
+                self.subst.insert(ra, new_rec);
+                Ok(())
+            }
+            (Some(ra), Some(rb)) => {
+                if ra == rb {
+                    if !a_only.is_empty() || !b_only.is_empty() {
+                        return Err("अभिलेख पंक्ति चर मेल नहीं".into());
+                    }
+                    return Ok(());
+                }
+                let rho = self.next_var; self.next_var += 1;
+                let ra_val = Type::Record { fields: b_only, rest: Some(rho) };
+                let rb_val = Type::Record { fields: a_only, rest: Some(rho) };
+                if self.occurs(ra, &ra_val) || self.occurs(rb, &rb_val) {
+                    return Err(format!("प्रकार अनंत — record row"));
+                }
+                self.subst.insert(ra, ra_val);
+                self.subst.insert(rb, rb_val);
+                Ok(())
+            }
         }
     }
 
@@ -255,12 +360,25 @@ impl Inferrer {
                 Type::List(Box::new(elt))
             }
             Expr::Dict(pairs) => {
-                let elt = self.fresh();
-                for pair in pairs {
-                    let t = self.infer_expr(&pair.1, env);
-                    self.unify_or_err(&elt, &t);
+                let all_str_keys = !pairs.is_empty() && pairs.iter().all(|(k, _)| matches!(k, Expr::Str(_)));
+                if all_str_keys {
+                    let mut fields: BTreeMap<String, Type> = BTreeMap::new();
+                    for (k, v) in pairs {
+                        if let Expr::Str(key) = k {
+                            let vt = self.infer_expr(v, env);
+                            fields.insert(key.clone(), vt);
+                        }
+                    }
+                    Type::Record { fields, rest: None }
+                } else {
+                    let elt = self.fresh();
+                    for pair in pairs {
+                        self.infer_expr(&pair.0, env);
+                        let t = self.infer_expr(&pair.1, env);
+                        self.unify_or_err(&elt, &t);
+                    }
+                    Type::Dict(Box::new(elt))
                 }
-                Type::Dict(Box::new(elt))
             }
             Expr::Call { name, args } => {
                 if self.classes.contains_key(name) {
@@ -299,7 +417,13 @@ impl Inferrer {
             Expr::Index { obj, idx } => {
                 let ot = self.infer_expr(obj, env);
                 self.infer_expr(idx, env);
-                match self.apply(&ot) {
+                let applied = self.apply(&ot);
+                if let Type::Record { fields, .. } = &applied {
+                    if let Expr::Str(key) = idx.as_ref() {
+                        if let Some(t) = fields.get(key) { return t.clone(); }
+                    }
+                }
+                match applied {
                     Type::List(inner) => *inner,
                     Type::Dict(inner) => *inner,
                     Type::Str => Type::Str,
@@ -314,8 +438,22 @@ impl Inferrer {
                 }
                 t
             }
-            Expr::Attr { obj, field: _ } => {
-                self.infer_expr(obj, env);
+            Expr::Attr { obj, field } => {
+                let ot = self.infer_expr(obj, env);
+                let applied = self.apply(&ot);
+                if let Type::Record { fields, .. } = &applied {
+                    if let Some(t) = fields.get(field) { return t.clone(); }
+                }
+                if matches!(applied, Type::Record { .. } | Type::Var(_)) {
+                    let ft = self.fresh();
+                    let rest_id = self.next_var;
+                    self.next_var += 1;
+                    let mut fmap = BTreeMap::new();
+                    fmap.insert(field.clone(), ft.clone());
+                    let record_ty = Type::Record { fields: fmap, rest: Some(rest_id) };
+                    self.unify_or_err(&ot, &record_ty);
+                    return ft;
+                }
                 Type::Any
             }
             Expr::MethodCall { object, method, args } => {
@@ -635,6 +773,12 @@ fn free_vars(t: &Type) -> Vec<u32> {
                 for a in args { walk(a, out); }
                 walk(ret, out);
             }
+            Type::Record { fields, rest } => {
+                for v in fields.values() { walk(v, out); }
+                if let Some(r) = rest {
+                    if !out.contains(r) { out.push(*r); }
+                }
+            }
             _ => {}
         }
     }
@@ -651,6 +795,19 @@ fn rename(t: &Type, m: &HashMap<u32, Type>) -> Type {
             args.iter().map(|a| rename(a, m)).collect(),
             Box::new(rename(ret, m)),
         ),
+        Type::Record { fields, rest } => {
+            let new_fields: BTreeMap<String, Type> = fields.iter()
+                .map(|(k, v)| (k.clone(), rename(v, m)))
+                .collect();
+            let new_rest = match rest {
+                Some(r) => match m.get(r) {
+                    Some(Type::Var(id)) => Some(*id),
+                    _ => *rest,
+                },
+                None => None,
+            };
+            Type::Record { fields: new_fields, rest: new_rest }
+        }
         _ => t.clone(),
     }
 }
@@ -768,5 +925,41 @@ mod tests {
         let (_, e) = infer_file("क है 1\nख है \"hi\"\nग है क - ख\n");
         assert!(!e.is_empty());
         assert!(e[0].line > 0, "line should be set, got: {}", e[0].line);
+    }
+
+    #[test]
+    fn dict_literal_becomes_record() {
+        let r = infer_ok("क है {\"नाम\": \"राम\", \"आयु\": 30}\n");
+        assert!(r["क"].contains("नाम: वाक्य"), "got: {}", r["क"]);
+        assert!(r["क"].contains("आयु: संख्या"), "got: {}", r["क"]);
+        assert!(r["क"].starts_with("{") && r["क"].ends_with("}"), "got: {}", r["क"]);
+    }
+
+    #[test]
+    fn record_field_via_string_index() {
+        let src = "व्यक्ति है {\"नाम\": \"राम\", \"आयु\": 30}\nजन्म है व्यक्ति[\"नाम\"]\n";
+        let r = infer_ok(src);
+        assert_eq!(r["जन्म"], "वाक्य");
+    }
+
+    #[test]
+    fn row_polymorphic_field_access_in_function() {
+        let src = "विधि नाम_का(व्यक्ति):\n    फल व्यक्ति.नाम\n";
+        let r = infer_ok(src);
+        assert!(r["नाम_का"].contains("->"), "got: {}", r["नाम_का"]);
+        assert!(r["नाम_का"].contains("नाम:"), "got: {}", r["नाम_का"]);
+    }
+
+    #[test]
+    fn closed_record_missing_field_errors() {
+        let src = "व्यक्ति है {\"नाम\": \"राम\", \"आयु\": 30}\nक है व्यक्ति.शहर\n";
+        let (_r, e) = infer_file(src);
+        assert!(!e.is_empty(), "expected a type error for missing field");
+    }
+
+    #[test]
+    fn comprehension_dict_still_uniform() {
+        let r = infer_ok("क है [i * 2 के लिए i 3 में]\n");
+        assert_eq!(r["क"], "सूची<संख्या>");
     }
 }

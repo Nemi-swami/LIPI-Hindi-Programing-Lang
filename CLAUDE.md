@@ -1713,6 +1713,27 @@ Landed 60/60 regression-clean, released binary reinstalled to `C:\Users\Nemi\App
 - **Scope caveats**: field access on instances returns Any (no row types); mutation via `है` doesn't tighten types; generator return types are Any. These are documented limits, not bugs.
 - 14 unit tests in `hm.rs::tests` — all pass. Covers polymorphism, class inheritance, comprehensions, lambdas, builtins, line-number carrying on errors.
 
+### Row polymorphism for HM (2026-07-13, batch 6)
+- `Type::Record { fields: BTreeMap<String, Type>, rest: Option<u32> }` — records with an optional row variable.
+- Dict literals with all-string-literal keys → closed `Record`; other dicts (comprehensions, dynamic keys) stay `Type::Dict` (uniform map).
+- `Expr::Attr` on records returns the known field type or introduces a row-variable-extended record. `Expr::Index` with a Str literal on a Record also works.
+- `unify_records` unifies common fields, flows unmatched fields into the other side's row var, errors on closed-record missing-field.
+- Pretty printing: `{नाम: वाक्य, आयु: संख्या}` (closed) or `{नाम: वाक्य | τ7}` (open). Verified via `lipi infer`.
+- 5 new HM tests (19 total) — all pass.
+
+### JIT comparison operators (2026-07-13, batch 6)
+- `Expr::Compare` now compiles to native code alongside arithmetic. CmpOps supported: `Eq(0)`, `NotEq(4)`, `Lt/SeKam(1)`, `Gt/SeAdhik(6)`, `LtEq(2)`, `GtEq(5)` — imm8 to `cmpsd`.
+- Result: 1.0 if true, 0.0 if false (via `andpd xmm0, xmm2` where xmm2 = 1.0). LIPI's Number-as-bool semantics carry this naturally.
+- `inline_expr` extended to recurse through `Expr::Compare` so let-bindings work under comparisons.
+- 2 new JIT tests (5 total) — all pass. Byte sequence for `<`: `... F2 0F C2 C1 01 48 B8 ..1.0 bits.. 66 48 0F 6E D0 66 0F 54 C2 ...`.
+
+### Self-hosting Stage 3 — bytecode emitter in LIPI (2026-07-13, batch 6)
+- `examples/selfhost_emitter.swami` — walks the Stage 2 AST and emits bytecode as a list of `{op, arg}` records.
+- Supports: PUSH/PUSH_STR/LOAD_VAR/STORE_VAR/ADD/SUB/MUL/DIV/MOD/EQ/LT/GT/LE/GE/NE/PRINT/CALL/RETURN/JUMP/JUMP_IF_FALSE/JUMP_IF_TRUE/NOT.
+- Handles `विधि` with a JUMP-over-body prologue + argument STORE_VARs (reversed since last arg is on top of stack) + trailing PUSH 0 + RETURN.
+- Jump backpatching via dict-mutating in place and re-storing at instruction index (LIPI dicts are COW; this pattern works because index-assign on a list of dicts rebinds the whole list).
+- Demo emits 19 instructions for the fib-like sample and prints a numbered listing with resolved jump targets.
+
 ### Short-circuit `और`/`या` (2026-07-13)
 - Compiler emits `Dup + JumpIfFalse + Pop + right` for `और`, mirror for `या`. Was previously eager (both sides always evaluated). Fixes patterns like `जब तक (i से कम len) और (arr[i] > 0):` that previously would out-of-bounds even when the length guard was false. Required for the self-hosted lexer/parser to run.
 

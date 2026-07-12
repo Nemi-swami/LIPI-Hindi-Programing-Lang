@@ -208,10 +208,10 @@ Landed 60/60 regression-clean, release binary reinstalled.
 ## PHASE 21 — Advanced / Surpass (3–5+ Years)
 > Goal: Genuinely better than Python in specific areas
 
-- [~] P4 XL **JIT compiler** — arithmetic JIT extended 2026-07-13 to multi-statement bodies via inline-substitution pass (`x है a+b; y है a-b; फल x*y` → `(a+b)*(a-b)` JIT'd). Further extension (division with runtime zero-check, control flow, comparison ops) still weeks
-- [x] P4 XL **Full type inference** — Production-coverage HM landed 2026-07-13 (`src/hm.rs`, `lipi infer`). Full AST + all Stmt forms, class typing with method dispatch through MRO, builtin environment with polymorphic signatures, source line tracking on errors, 14 unit tests all pass. Documented scope caveats (field access → Any; no row types). Includes short-circuit `और`/`या` compiler fix required for real code
+- [~] P4 XL **JIT compiler** — arithmetic + multi-statement (2026-07-13a) + comparison operators (2026-07-13b, batch 6): full CmpOp set via `cmpsd` + andpd-mask trick. Remaining: division with runtime zero-check, control flow (branches for ternary/if-in-expr)
+- [x] P4 XL **Full type inference** — Production HM + row polymorphism (2026-07-13 batch 6). Records with row vars, dict-literal → closed record inference, `Attr`/`Index[Str-literal]` field lookup with row-variable extension, 19 hm:: tests all pass
 - [ ] P4 XL **Effect system** — track pure/IO/state at compile time
-- [~] P4 XL **Self-hosting** — Stages 1+2 done 2026-07-13. Full lexer (`examples/selfhost_lexer_full.swami`: 49 keywords, all operators, string escapes, hex/sci nums, `#`/`।` comments, INDENT/DEDENT). Full expression parser (`examples/selfhost_parser.swami`: precedence-climbing recursive descent, produces Dict-AST). Stages 3–4 (bytecode emit + round-trip) are 3–5 months more; stage 5 (LVM in LIPI) another 6–12 months. See `docs/BOOTSTRAP.md`
+- [~] P4 XL **Self-hosting** — Stages 1+2+3 done (2026-07-13). Stage 3: `examples/selfhost_emitter.swami` walks the AST and emits bytecode with jump backpatching + function tables. Stage 4 (round-trip: LIPI-emitted bytecode running on the LIPI-in-LIPI LVM) is the remaining month(s) of work; Stage 5 (LVM in LIPI) another 6–12 months
 - [ ] P4 XL **Parallel collections** — auto-parallelize map/filter with Rayon
 - [ ] P4 XL **AOT compiler** — compile LIPI → native binary (no runtime needed)
 - [ ] P4 XL **GPU support** — CUDA/Metal/Vulkan tensor ops

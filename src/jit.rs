@@ -30,7 +30,7 @@ use crate::ast::Stmt;
 use std::collections::HashMap;
 
 #[cfg(target_arch = "x86_64")]
-use crate::ast::{unwrap_located, BinOp, Expr};
+use crate::ast::{unwrap_located, BinOp, CmpOp, Expr};
 
 /// A compiled native function. Owns its executable page; frees it on drop.
 /// On non-x86-64 targets this is never constructed (the JIT is inert there).
@@ -92,6 +92,27 @@ mod x86 {
                 c.extend_from_slice(&[0xF2, 0x0F, 0x11, 0x04, 0x24]); // movsd [rsp], xmm0  (result)
                 Some(())
             }
+            Expr::Compare { left, op, right } => {
+                let imm: u8 = match op {
+                    CmpOp::Eq => 0,
+                    CmpOp::NotEq => 4,
+                    CmpOp::SeKam | CmpOp::Lt => 1,
+                    CmpOp::SeAdhik | CmpOp::Gt => 6,
+                    CmpOp::LtEq => 2,
+                    CmpOp::GtEq => 5,
+                };
+                emit(c, left, params)?;
+                emit(c, right, params)?;
+                c.extend_from_slice(&[0xF2, 0x0F, 0x10, 0x0C, 0x24]); // movsd xmm1, [rsp]  (b)
+                c.extend_from_slice(&[0x48, 0x83, 0xC4, 0x08]);       // add rsp, 8
+                c.extend_from_slice(&[0xF2, 0x0F, 0x10, 0x04, 0x24]); // movsd xmm0, [rsp]  (a)
+                c.extend_from_slice(&[0xF2, 0x0F, 0xC2, 0xC1, imm]);  // cmpsd xmm0, xmm1, imm8
+                c.extend_from_slice(&[0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F]); // mov rax, 1.0 bits
+                c.extend_from_slice(&[0x66, 0x48, 0x0F, 0x6E, 0xD0]); // movq xmm2, rax
+                c.extend_from_slice(&[0x66, 0x0F, 0x54, 0xC2]);       // andpd xmm0, xmm2
+                c.extend_from_slice(&[0xF2, 0x0F, 0x11, 0x04, 0x24]); // movsd [rsp], xmm0
+                Some(())
+            }
             _ => None,
         }
     }
@@ -100,6 +121,11 @@ mod x86 {
         match e {
             Expr::Ident(name) => bindings.get(name).cloned().unwrap_or_else(|| e.clone()),
             Expr::Binary { left, op, right } => Expr::Binary {
+                left: Box::new(inline_expr(left, bindings)),
+                op: op.clone(),
+                right: Box::new(inline_expr(right, bindings)),
+            },
+            Expr::Compare { left, op, right } => Expr::Compare {
                 left: Box::new(inline_expr(left, bindings)),
                 op: op.clone(),
                 right: Box::new(inline_expr(right, bindings)),
@@ -228,10 +254,11 @@ pub fn compile_program(_stmts: &[Stmt]) -> HashMap<String, JitFn> {
 mod tests {
     use super::x86::{codegen, mem};
     use super::call_raw;
-    use crate::ast::{BinOp, Expr, Stmt};
+    use crate::ast::{BinOp, CmpOp, Expr, Stmt};
     fn expr_num(n: f64) -> Expr { Expr::Number(n) }
     fn ident(s: &str) -> Expr { Expr::Ident(s.into()) }
     fn bin(l: Expr, op: BinOp, r: Expr) -> Expr { Expr::Binary { left: Box::new(l), op, right: Box::new(r) } }
+    fn cmp(l: Expr, op: CmpOp, r: Expr) -> Expr { Expr::Compare { left: Box::new(l), op, right: Box::new(r) } }
 
     #[test]
     fn jit_arithmetic() {
@@ -267,5 +294,48 @@ mod tests {
         let params = vec!["a".to_string()];
         let body = vec![Stmt::Fal(bin(ident("a"), BinOp::Div, Expr::Number(2.0)))];
         assert!(codegen(&params, &body).is_none());
+    }
+
+    #[test]
+    fn jit_compare_lt() {
+        let params = vec!["a".to_string(), "b".to_string()];
+        let body = vec![Stmt::Fal(cmp(ident("a"), CmpOp::Lt, ident("b")))];
+        let code = codegen(&params, &body).expect("should JIT compare");
+        let ptr = unsafe { mem::alloc(&code) };
+        assert!(ptr != 0);
+        let r_true = unsafe { call_raw(ptr, &[3.0, 7.0]) };
+        let r_false = unsafe { call_raw(ptr, &[7.0, 3.0]) };
+        let r_eq = unsafe { call_raw(ptr, &[5.0, 5.0]) };
+        unsafe { mem::free(ptr); }
+        assert_eq!(r_true, 1.0);
+        assert_eq!(r_false, 0.0);
+        assert_eq!(r_eq, 0.0);
+    }
+
+    #[test]
+    fn jit_compare_all_ops() {
+        let params = vec!["a".to_string(), "b".to_string()];
+        let cases: &[(CmpOp, f64, f64, f64)] = &[
+            (CmpOp::Eq, 3.0, 3.0, 1.0),
+            (CmpOp::Eq, 3.0, 4.0, 0.0),
+            (CmpOp::NotEq, 3.0, 4.0, 1.0),
+            (CmpOp::NotEq, 3.0, 3.0, 0.0),
+            (CmpOp::SeAdhik, 7.0, 3.0, 1.0),
+            (CmpOp::SeAdhik, 3.0, 7.0, 0.0),
+            (CmpOp::SeKam, 3.0, 7.0, 1.0),
+            (CmpOp::Gt, 7.0, 3.0, 1.0),
+            (CmpOp::LtEq, 5.0, 5.0, 1.0),
+            (CmpOp::LtEq, 6.0, 5.0, 0.0),
+            (CmpOp::GtEq, 5.0, 5.0, 1.0),
+            (CmpOp::GtEq, 4.0, 5.0, 0.0),
+        ];
+        for (op, a, b, want) in cases {
+            let body = vec![Stmt::Fal(cmp(ident("a"), op.clone(), ident("b")))];
+            let code = codegen(&params, &body).unwrap();
+            let ptr = unsafe { mem::alloc(&code) };
+            let got = unsafe { call_raw(ptr, &[*a, *b]) };
+            unsafe { mem::free(ptr); }
+            assert_eq!(got, *want, "op={:?} a={} b={}", op, a, b);
+        }
     }
 }
