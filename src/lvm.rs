@@ -52,6 +52,16 @@ struct Frame {
     base_stack_depth: usize,
     /// Name the function was called by — shown in stack traces (Phase 17 diagnostics)
     func_name: String,
+    /// If true, the value the frame pushes on Return is negated (Bool → !Bool).
+    /// Used to reuse `__बराबर__` for `!=` when no `__असमान__` is defined.
+    negate_return: bool,
+    /// If Some(name) and the frame returns Nil, push this local's current value
+    /// instead. Used by the property-setter dispatch: a setter body like
+    /// `यह._x है val` mutates `यह` in place, but without a trailing `फल यह`
+    /// the method returns Nil and clobbers the caller's variable. This hint
+    /// makes that case safe — Nil returns get substituted with the setter's
+    /// mutated `यह` local.
+    on_nil_push_local: Option<String>,
 }
 
 struct TryFrame {
@@ -181,6 +191,9 @@ impl LVM {
         vm.native_fns.insert("पूर्ण_है".into(), builtin_purna_hai);
         // Type inspection
         vm.native_fns.insert("प्रकार".into(), builtin_prakar);
+        vm.native_fns.insert("है_उदाहरण".into(), builtin_hai_udaharan);
+        vm.native_fns.insert("विशेषताएँ".into(), builtin_visheshtaayen);
+        vm.native_fns.insert("वर्ग_का".into(), builtin_varg_ka);
         // String formatting
         vm.native_fns.insert("स्वरूप".into(), builtin_swaroop);
         // Ancient Hindu constants (Brahmagupta, Āryabhaṭa)
@@ -259,6 +272,10 @@ impl LVM {
     /// pushes the result where the operator's result would go. Returns Ok(false)
     /// if `a` is not an instance or has no such method (caller falls back).
     fn try_instance_binop(&mut self, a: Value, b: Value, method: &str, ip: &mut usize) -> Result<bool, String> {
+        self.try_instance_binop_ex(a, b, method, ip, false)
+    }
+
+    fn try_instance_binop_ex(&mut self, a: Value, b: Value, method: &str, ip: &mut usize, negate_return: bool) -> Result<bool, String> {
         if let Value::Instance { ref class, .. } = a {
             if let Some(func) = self.lookup_method(class, method) {
                 let class_name = class.clone();
@@ -273,6 +290,8 @@ impl LVM {
                     global_names: std::collections::HashSet::new(),
                     base_stack_depth: self.stack.len(),
                     func_name: format!("{}.{}", class_name, method),
+                    negate_return,
+                    on_nil_push_local: None,
                 })?;
                 *ip = func.start_ip;
                 return Ok(true);
@@ -320,6 +339,8 @@ impl LVM {
             global_names: std::collections::HashSet::new(),
             base_stack_depth: 0,
             func_name: name,
+            negate_return: false,
+            on_nil_push_local: None,
         };
         self.generators.insert(id, GenState { ip: start_ip, stack: Vec::new(), frames: vec![frame], done: false });
         Value::Generator(id)
@@ -969,11 +990,19 @@ impl LVM {
                 Opcode::Eq => {
                     let b = pop(&mut self.stack)?;
                     let a = pop(&mut self.stack)?;
+                    if matches!(a, Value::Instance { .. })
+                        && self.try_instance_binop(a.clone(), b.clone(), "__बराबर__", ip)? {
+                        return Ok(false);
+                    }
                     self.stack.push(Value::Bool(vals_eq(&a, &b)));
                 }
                 Opcode::NotEq => {
                     let b = pop(&mut self.stack)?;
                     let a = pop(&mut self.stack)?;
+                    if matches!(a, Value::Instance { .. })
+                        && self.try_instance_binop_ex(a.clone(), b.clone(), "__बराबर__", ip, true)? {
+                        return Ok(false);
+                    }
                     self.stack.push(Value::Bool(!vals_eq(&a, &b)));
                 }
                 Opcode::Gt => {
@@ -1068,7 +1097,7 @@ impl LVM {
                             self.stack.push(g);
                             return Ok(false);
                         }
-                        self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone() })?;
+                        self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone(), negate_return: false, on_nil_push_local: None })?;
                         *ip = func.start_ip;
                         return Ok(false);
                     }
@@ -1096,7 +1125,7 @@ impl LVM {
                                 locals.insert(param.clone(), arg);
                             }
                             fill_defaults(&mut locals, &func, provided);
-                            self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone() })?;
+                            self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone(), negate_return: false, on_nil_push_local: None })?;
                             *ip = func.start_ip;
                             return Ok(false);
                         }
@@ -1238,6 +1267,61 @@ impl LVM {
                         cap.insert("__bound".to_string(), Value::List(args[1..].to_vec()));
                         self.stack.push(Value::Closure { func_name: "__functools_partial__".into(), captured: cap });
                     }
+                    else if name == "चलाओ_कोड" && argc == 1 {
+                        let src = match &args[0] {
+                            Value::Str(s) => s.clone(),
+                            other => return Err(format!("चलाओ_कोड(): वाक्य अपेक्षित, मिला: {}", other)),
+                        };
+                        let tokens = crate::lexer::tokenize(&src);
+                        let stmts = crate::parser::parse(tokens)
+                            .map_err(|e| format!("चलाओ_कोड: व्याकरण त्रुटि: {}", e))?;
+                        let prog = crate::compiler::Compiler::compile_program(&stmts);
+                        let mut sub = LVM::new();
+                        sub.globals = self.globals.clone();
+                        sub.capture = self.capture;
+                        sub.run(&prog).map_err(|e| format!("चलाओ_कोड: {}", e))?;
+                        if self.capture { self.output.push_str(&sub.output); }
+                        for (k, v) in sub.globals.into_iter() {
+                            self.globals.insert(k, v);
+                        }
+                        self.stack.push(Value::Nil);
+                    }
+                    else if name == "मूल्यांकन" && argc == 1 {
+                        let src = match &args[0] {
+                            Value::Str(s) => s.clone(),
+                            other => return Err(format!("मूल्यांकन(): वाक्य अपेक्षित, मिला: {}", other)),
+                        };
+                        let wrapped = format!("__eval_result__ है ({})\n", src);
+                        let tokens = crate::lexer::tokenize(&wrapped);
+                        let stmts = crate::parser::parse(tokens)
+                            .map_err(|e| format!("मूल्यांकन: व्याकरण त्रुटि: {}", e))?;
+                        let prog = crate::compiler::Compiler::compile_program(&stmts);
+                        let mut sub = LVM::new();
+                        sub.globals = self.globals.clone();
+                        sub.capture = self.capture;
+                        sub.run(&prog).map_err(|e| format!("मूल्यांकन: {}", e))?;
+                        if self.capture { self.output.push_str(&sub.output); }
+                        let result = sub.globals.get("__eval_result__").cloned().unwrap_or(Value::Nil);
+                        for (k, v) in sub.globals.into_iter() {
+                            if k != "__eval_result__" {
+                                self.globals.insert(k, v);
+                            }
+                        }
+                        self.stack.push(result);
+                    }
+                    else if name == "विधियाँ_का" && argc == 1 {
+                        let class = match &args[0] {
+                            Value::Str(s) => s.clone(),
+                            Value::Instance { class, .. } => class.clone(),
+                            other => return Err(format!("विधियाँ_का(): वाक्य/वस्तु अपेक्षित, मिला: {}", other)),
+                        };
+                        let prefix = format!("{}::", class);
+                        let mut names: Vec<String> = self.functions.keys()
+                            .filter_map(|k| k.strip_prefix(&prefix).map(|s| s.to_string()))
+                            .collect();
+                        names.sort();
+                        self.stack.push(Value::List(names.into_iter().map(Value::Str).collect()));
+                    }
                     else if name == "स्मरण" && argc == 1 {
                         // स्मरण(f) → memoizing wrapper; cache lives on the VM by id
                         let id = self.memo_next;
@@ -1258,13 +1342,18 @@ impl LVM {
                                 let res = self.call_functools(&func_name, &captured, args, instructions)?;
                                 self.stack.push(res);
                             } else if let Some(func) = self.functions.get(&func_name).cloned() {
-                                let mut locals = captured; // start with captured scope
+                                let mut locals = captured;
                                 let provided = args.len();
-                                for (param, arg) in func.params.iter().zip(args) {
-                                    locals.insert(param.clone(), arg);
+                                let regular = func.params.len();
+                                for (param, arg) in func.params.iter().zip(args.iter()) {
+                                    locals.insert(param.clone(), arg.clone());
                                 }
                                 fill_defaults(&mut locals, &func, provided);
-                                self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone() })?;
+                                if let Some(ref vname) = func.vararg {
+                                    let rest: Vec<Value> = args.into_iter().skip(regular).collect();
+                                    locals.insert(vname.clone(), Value::List(rest));
+                                }
+                                self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone(), negate_return: false, on_nil_push_local: None })?;
                                 *ip = func.start_ip;
                             } else {
                                 return Err(format!("विधि '{}' परिभाषित नहीं है", func_name));
@@ -1316,7 +1405,7 @@ impl LVM {
                         Some((func, base_locals)) => {
                             let mut locals = base_locals;
                             bind_args_kw(&mut locals, &func, args, kwnames, kwvals, name)?;
-                            self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone() })?;
+                            self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: name.clone(), negate_return: false, on_nil_push_local: None })?;
                             *ip = func.start_ip;
                             return Ok(false);
                         }
@@ -1345,7 +1434,25 @@ impl LVM {
                 Opcode::Return => {
                     let val = pop(&mut self.stack)?;
                     if let Some(frame) = self.call_frames.pop() {
-                        self.stack.push(val);
+                        // Property-setter footgun: if the returned value is Nil and
+                        // the frame carried a `on_nil_push_local` hint (setter → "यह"),
+                        // substitute that local's current value so the caller's variable
+                        // isn't clobbered with Nil.
+                        let val = if matches!(val, Value::Nil) {
+                            if let Some(ref name) = frame.on_nil_push_local {
+                                frame.locals.get(name).cloned().unwrap_or(Value::Nil)
+                            } else { val }
+                        } else { val };
+                        let out = if frame.negate_return {
+                            // Used by NotEq path routing through __बराबर__: negate the Bool result
+                            match val {
+                                Value::Bool(b) => Value::Bool(!b),
+                                other => return Err(format!(
+                                    "__बराबर__ को Bool लौटाना चाहिए, मिला: {}", other
+                                )),
+                            }
+                        } else { val };
+                        self.stack.push(out);
                         *ip = frame.return_addr;
                         return Ok(false);
                     } else {
@@ -1458,7 +1565,7 @@ impl LVM {
                     let mut locals = HashMap::new();
                     let all: Vec<Value> = std::iter::once(obj).chain(args).collect();
                     bind_args_kw(&mut locals, &func, all, kwnames, kwvals, method)?;
-                    self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: format!("{}.{}", class_name, method) })?;
+                    self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: format!("{}.{}", class_name, method), negate_return: false, on_nil_push_local: None })?;
                     *ip = func.start_ip;
                     return Ok(false);
                 }
@@ -1484,23 +1591,32 @@ impl LVM {
                         return Ok(false);
                     }
 
-                    // User-defined instance method → push frame and jump
                     if let Value::Instance { ref class, .. } = obj {
                         let class_name = class.clone();
-                        // Look up method in own class, then walk parent chain
-                        let func = {
+                        let (func, deco): (Option<FuncDef>, Option<Value>) = {
                             let mut search = Some(class_name.clone());
-                            let mut found = None;
+                            let mut found = (None, None);
                             while let Some(cls) = search {
+                                let dkey = format!("__cls_deco_{}_{}__", cls, method);
+                                if let Some(v) = self.globals.get(&dkey).cloned() {
+                                    found = (None, Some(v));
+                                    break;
+                                }
                                 let key = format!("{}::{}", cls, method);
                                 if let Some(f) = self.functions.get(&key).cloned() {
-                                    found = Some(f);
+                                    found = (Some(f), None);
                                     break;
                                 }
                                 search = self.class_parents.get(&cls).cloned();
                             }
                             found
                         };
+                        if let Some(deco_val) = deco {
+                            let all: Vec<Value> = std::iter::once(obj).chain(args).collect();
+                            let result = self.call_closure_value(&deco_val, all, instructions)?;
+                            self.stack.push(result);
+                            return Ok(false);
+                        }
                         if let Some(func) = func {
                             let mut locals = HashMap::new();
                             let all: Vec<Value> = std::iter::once(obj).chain(args).collect();
@@ -1509,7 +1625,7 @@ impl LVM {
                                 locals.insert(param.clone(), val);
                             }
                             fill_defaults(&mut locals, &func, provided);
-                            self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: format!("{}.{}", class_name, method) })?;
+                            self.push_frame(Frame { return_addr: *ip, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name: format!("{}.{}", class_name, method), negate_return: false, on_nil_push_local: None })?;
                             *ip = func.start_ip;
                             return Ok(false);
                         }
@@ -1713,6 +1829,8 @@ impl LVM {
                                     global_names: std::collections::HashSet::new(),
                                     base_stack_depth: self.stack.len(),
                                     func_name: format!("{}.{}", class_name, getter),
+                                    negate_return: false,
+                                    on_nil_push_local: None,
                                 })?;
                                 *ip = func.start_ip;
                                 return Ok(false);
@@ -1776,6 +1894,11 @@ impl LVM {
                                     global_names: std::collections::HashSet::new(),
                                     base_stack_depth: self.stack.len(),
                                     func_name: format!("{}.{}", class_name, setter),
+                                    negate_return: false,
+                                    // Footgun-proof: if the setter body forgets `फल यह`,
+                                    // substitute the mutated `यह` local so the caller's
+                                    // variable isn't clobbered with Nil.
+                                    on_nil_push_local: Some("यह".to_string()),
                                 })?;
                                 *ip = func.start_ip;
                                 return Ok(false);
@@ -1997,6 +2120,16 @@ impl LVM {
                     let start = pop(&mut self.stack)?;
                     let obj   = pop(&mut self.stack)?;
                     self.stack.push(crate::interpreter::slice_value(obj, start, end, step)?);
+                }
+
+                Opcode::SetSlice => {
+                    let rhs   = pop(&mut self.stack)?;
+                    let step  = pop(&mut self.stack)?;
+                    let end   = pop(&mut self.stack)?;
+                    let start = pop(&mut self.stack)?;
+                    let obj   = pop(&mut self.stack)?;
+                    let new = do_slice_assign(obj, start, end, step, rhs)?;
+                    self.stack.push(new);
                 }
 
                 // ── Phase 17: Spread in list literals ──────────────────────
@@ -2224,13 +2357,18 @@ impl LVM {
         // Start with captured scope, then overlay actual arguments
         let mut locals = captured;
         let provided = args.len();
-        for (param, arg) in func.params.iter().zip(args.into_iter()) {
-            locals.insert(param.clone(), arg);
+        let regular = func.params.len();
+        for (param, arg) in func.params.iter().zip(args.iter()) {
+            locals.insert(param.clone(), arg.clone());
         }
         fill_defaults(&mut locals, &func, provided);
+        if let Some(ref vname) = func.vararg {
+            let rest: Vec<Value> = args.into_iter().skip(regular).collect();
+            locals.insert(vname.clone(), Value::List(rest));
+        }
 
         // Sentinel return_addr: usize::MAX causes the mini-loop to exit when Return fires
-        self.push_frame(Frame { return_addr: usize::MAX, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name })?;
+        self.push_frame(Frame { return_addr: usize::MAX, locals, global_names: std::collections::HashSet::new(), base_stack_depth: self.stack.len(), func_name, negate_return: false, on_nil_push_local: None })?;
         let mut sub_ip = func.start_ip;
 
         loop {
@@ -2520,9 +2658,62 @@ fn vm_num2<F: Fn(f64, f64) -> f64>(a: Value, b: Value, op: F, sym: &str) -> Resu
     }
 }
 
+fn do_slice_assign(obj: Value, start: Value, end: Value, step: Value, rhs: Value) -> Result<Value, String> {
+    let mut list = match obj {
+        Value::List(v) => v,
+        other => return Err(format!("स्लाइस असाइनमेंट सूची पर ही चलता है, मिला: {}", other)),
+    };
+    let rhs_items: Vec<Value> = match rhs {
+        Value::List(v) => v,
+        other => return Err(format!("स्लाइस असाइनमेंट का दायाँ पक्ष सूची होना चाहिए, मिला: {}", other)),
+    };
+    let to_opt = |v: Value| -> Result<Option<i64>, String> {
+        match v {
+            Value::Nil => Ok(None),
+            Value::Number(n) => Ok(Some(n as i64)),
+            other => Err(format!("स्लाइस अनुक्रमणिका संख्या चाहिए, मिला: {}", other)),
+        }
+    };
+    let s = to_opt(start)?;
+    let e = to_opt(end)?;
+    let st = match to_opt(step)? { Some(0) => return Err("स्लाइस स्टेप 0 नहीं हो सकता".into()), Some(v) => v, None => 1 };
+    let len = list.len() as i64;
+    let idxs = crate::interpreter::slice_indices(len, s, e, st);
+    if st == 1 {
+        let lo = idxs.first().copied().unwrap_or_else(|| {
+            let norm = |v: i64| if v < 0 { v + len } else { v };
+            norm(s.unwrap_or(0)).clamp(0, len)
+        }) as usize;
+        let hi = lo + idxs.len();
+        check_list_len(list.len() - idxs.len() + rhs_items.len())?;
+        list.splice(lo..hi, rhs_items);
+        return Ok(Value::List(list));
+    }
+    if idxs.len() != rhs_items.len() {
+        return Err(format!(
+            "स्लाइस असाइनमेंट: लंबाई मेल नहीं ({} स्थान, {} मान)",
+            idxs.len(), rhs_items.len()
+        ));
+    }
+    for (i, v) in idxs.into_iter().zip(rhs_items.into_iter()) {
+        list[i as usize] = v;
+    }
+    Ok(Value::List(list))
+}
+
 fn vm_bitwise2<F: Fn(i64, i64) -> i64>(a: Value, b: Value, op: F, sym: &str) -> Result<Value, String> {
+    // f64→i64 loses precision above 2^53. Rather than silently truncate, error out —
+    // users doing bit-work on huge numbers should use भारत.बड़ी explicitly.
+    const MAX: f64 = 9_007_199_254_740_992.0; // 2^53
     match (a, b) {
-        (Value::Number(x), Value::Number(y)) => Ok(Value::Number(op(x as i64, y as i64) as f64)),
+        (Value::Number(x), Value::Number(y)) => {
+            if x.abs() > MAX || y.abs() > MAX {
+                return Err(format!(
+                    "'{sym}' बिट संक्रिया: सटीकता खो जाएगी (मान > 2^53) — बड़ी संख्या के लिए भारत.बड़ी उपयोग करें"
+                ));
+            }
+            Ok(Value::Number(op(x as i64, y as i64) as f64))
+        }
         (a, b) => Err(format!("'{sym}' के लिए पूर्णांक चाहिए, मिला: '{a}' और '{b}'")),
     }
 }
@@ -3193,4 +3384,42 @@ fn builtin_prakar(args: Vec<Value>) -> Result<Value, String> {
         Some(Value::Generator(_))      => "जनित्र",
     };
     Ok(Value::Str(name.to_string()))
+}
+
+fn builtin_hai_udaharan(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 2 {
+        return Err("है_उदाहरण(obj, \"नाम\") को 2 तर्क चाहिए".into());
+    }
+    let target = match &args[1] {
+        Value::Str(s) => s.clone(),
+        other => return Err(format!("है_उदाहरण(): दूसरा तर्क वाक्य चाहिए, मिला: {}", other)),
+    };
+    match &args[0] {
+        Value::Instance { class, .. } => Ok(Value::Bool(class == &target)),
+        _ => Ok(Value::Bool(false)),
+    }
+}
+
+fn builtin_visheshtaayen(args: Vec<Value>) -> Result<Value, String> {
+    match args.first() {
+        Some(Value::Instance { fields, .. }) => {
+            let mut keys: Vec<String> = fields.keys().cloned().collect();
+            keys.sort();
+            Ok(Value::List(keys.into_iter().map(Value::Str).collect()))
+        }
+        Some(Value::Dict(m)) => {
+            let mut keys: Vec<String> = m.keys().cloned().collect();
+            keys.sort();
+            Ok(Value::List(keys.into_iter().map(Value::Str).collect()))
+        }
+        other => Err(format!("विशेषताएँ(): वस्तु/कोश अपेक्षित, मिला: {:?}", other.map(|v| v.to_string()))),
+    }
+}
+
+fn builtin_varg_ka(args: Vec<Value>) -> Result<Value, String> {
+    match args.first() {
+        Some(Value::Instance { class, .. }) => Ok(Value::Str(class.clone())),
+        Some(other) => builtin_prakar(vec![other.clone()]),
+        None => Err("वर्ग_का(): कोई तर्क नहीं".into()),
+    }
 }

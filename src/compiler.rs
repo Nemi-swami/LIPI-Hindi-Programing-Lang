@@ -42,6 +42,12 @@ fn stmt_has_await(stmt: &Stmt) -> bool {
         Stmt::MultiAssign { values, .. } => values.iter().any(expr_has_await),
         Stmt::AttrAssign { val, .. } => expr_has_await(val),
         Stmt::IndexAssign { idx, val, .. } => expr_has_await(idx) || expr_has_await(val),
+        Stmt::SliceAssign { start, end, step, val, .. } => {
+            start.as_ref().is_some_and(expr_has_await)
+                || end.as_ref().is_some_and(expr_has_await)
+                || step.as_ref().is_some_and(expr_has_await)
+                || expr_has_await(val)
+        }
         Stmt::Yadi { condition, then, otherwise } =>
             expr_has_await(condition) || then.iter().any(stmt_has_await)
                 || otherwise.as_ref().is_some_and(|o| o.iter().any(stmt_has_await)),
@@ -535,12 +541,21 @@ impl Compiler {
                 self.patch(jmp, Opcode::Jump(end));
             }
 
-            // name[idx] है val  — index assignment
             Stmt::IndexAssign { obj, idx, val } => {
                 self.emit(Opcode::LoadVar(obj.clone()));
                 self.compile_expr(idx);
                 self.compile_expr(val);
                 self.emit(Opcode::SetIndex);
+                self.emit(Opcode::StoreVar(obj.clone()));
+            }
+
+            Stmt::SliceAssign { obj, start, end, step, val } => {
+                self.emit(Opcode::LoadVar(obj.clone()));
+                if let Some(e) = start { self.compile_expr(e); } else { self.emit(Opcode::Push(crate::opcode::LvmValue::Nil)); }
+                if let Some(e) = end { self.compile_expr(e); } else { self.emit(Opcode::Push(crate::opcode::LvmValue::Nil)); }
+                if let Some(e) = step { self.compile_expr(e); } else { self.emit(Opcode::Push(crate::opcode::LvmValue::Nil)); }
+                self.compile_expr(val);
+                self.emit(Opcode::SetSlice);
                 self.emit(Opcode::StoreVar(obj.clone()));
             }
 
@@ -690,15 +705,12 @@ impl Compiler {
                 self.emit(Opcode::DeclareConst(name.clone()));
             }
 
-            // वर्ग name[(parent)]: [methods]  — class definition
             Stmt::Varg { name: class_name, methods, .. } => {
                 for method_stmt in methods {
-                    if let Stmt::Vidhi { name: method_name, params, body, vararg, is_static, .. } = unwrap_located(method_stmt) {
+                    if let Stmt::Vidhi { name: method_name, params, body, vararg, is_static, decorators, .. } = unwrap_located(method_stmt) {
                         let jmp = self.emit(Opcode::Jump(0));
                         let start_ip = self.here();
 
-                        // Static methods (साझा विधि) take no implicit यह; instance
-                        // methods get यह prepended as the first param.
                         let (full_params, defaults): (Vec<String>, Vec<Option<LvmValue>>) = if *is_static {
                             (
                                 params.iter().map(|p| p.name.clone()).collect(),
@@ -725,7 +737,6 @@ impl Compiler {
                         self.in_function -= 1;
                         self.in_generator = prev_gen;
 
-                        // बनाओ (constructor) returns यह implicitly
                         if method_name == "बनाओ" && !*is_static {
                             self.emit(Opcode::LoadVar("यह".into()));
                         } else {
@@ -733,6 +744,24 @@ impl Compiler {
                         }
                         self.emit(Opcode::Return);
                         self.patch(jmp, Opcode::Jump(self.here()));
+
+                        if !decorators.is_empty() {
+                            self.emit(Opcode::LoadVar(format!("{}::{}", class_name, method_name)));
+                            for deco in decorators.iter().rev() {
+                                match deco {
+                                    Expr::Ident(dname) => {
+                                        self.emit(Opcode::Call(dname.clone(), 1));
+                                    }
+                                    _ => {
+                                        let tmp = format!("__deco_tmp{}__", self.fresh_id());
+                                        self.compile_expr(deco);
+                                        self.emit(Opcode::StoreVar(tmp.clone()));
+                                        self.emit(Opcode::Call(tmp, 1));
+                                    }
+                                }
+                            }
+                            self.emit(Opcode::StoreVar(format!("__cls_deco_{}_{}__", class_name, method_name)));
+                        }
                     }
                 }
             }
@@ -1253,20 +1282,18 @@ impl Compiler {
             }
 
             // लाम्डा(params): body  — anonymous function (Phase 10)
-            Expr::Lambda { params, body } => {
+            Expr::Lambda { params, vararg, body } => {
                 let id = self.fresh_id();
                 let lam_name = format!("__lam_{id}__");
 
-                // Compile the lambda body as an inline function (skipped by Jump)
                 let jmp = self.emit(Opcode::Jump(0));
                 let start_ip = self.here();
-                self.functions.insert(lam_name.clone(), FuncDef { params: params.clone(), start_ip, vararg: None, defaults: vec![None; params.len()], is_generator: false });
+                self.functions.insert(lam_name.clone(), FuncDef { params: params.clone(), start_ip, vararg: vararg.clone(), defaults: vec![None; params.len()], is_generator: false });
                 for s in body { self.compile_stmt(s); }
                 self.emit(Opcode::Push(LvmValue::Nil));
                 self.emit(Opcode::Return);
                 self.patch(jmp, Opcode::Jump(self.here()));
 
-                // Push a closure reference onto the stack
                 self.emit(Opcode::MakeClosure(lam_name));
             }
         }

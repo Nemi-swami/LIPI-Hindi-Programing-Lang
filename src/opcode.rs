@@ -206,4 +206,6 @@ pub enum Opcode {
     /// obj.method(pos…, kw=…) — instance method call with keyword args. Stack:
     /// object, positional args, then keyword values in `kwnames` order. Tag 0x4C.
     MethodCallKw { method: String, pos_argc: usize, kwnames: Vec<String> },
+
+    SetSlice,
 }

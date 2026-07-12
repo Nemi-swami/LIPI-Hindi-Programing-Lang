@@ -175,10 +175,40 @@
 
 ---
 
-## PHASE 20 — Advanced / Surpass (3–5+ Years)
+## PHASE 20 — Cleanup Batch (2026-07-13) — COMPLETE
+
+Landed 60/60 regression-clean, release binary reinstalled.
+
+### Language additions
+- [x] P1 S  **`;` as statement separator** — lexer emits Newline on `;` outside strings
+- [x] P1 S  **Scientific-notation literals** — `1e3`, `1.5e-2`, `2E+5`
+- [x] P1 S  **Radix literals** — `0xFF`, `0o77`, `0b1011` with `_` separators
+- [x] P1 S  **Block comments** — `।।…।।` span multiple lines (lexer preprocessor)
+- [x] P1 M  **`__बराबर__` overload** — both `==` and `!=` route through it via `Frame.negate_return`
+- [x] P1 M  **Slice assignment** — `सूची[a:b:c] है [...]`, new opcode `SetSlice` (tag 0x4D), List-only
+- [x] P1 M  **Class-method decorators** — `@dec विधि x() in वर्ग`, per-class-in-chain dispatch check before FuncDef lookup, subclasses inherit wrapped closures
+- [x] P1 S  **`*args` in lambdas** — `लाम्डा(*नाम): ...` packs extras into a List
+
+### New builtins
+- [x] P2 S  **Introspection** — `है_उदाहरण(obj, "वर्ग")`, `विशेषताएँ(obj)`, `वर्ग_का(obj)`, `विधियाँ_का(cls)`
+- [x] P2 S  **`चलाओ_कोड(src)`** — Python-like exec; shares globals
+- [x] P2 S  **`मूल्यांकन(src)`** — Python-like eval; returns expression value
+
+### Runtime / tooling fixes
+- [x] P1 S  **Non-zero exit on errors** — `main.rs run()` calls `std::process::exit(1)` on parse+runtime errors
+- [x] P1 M  **Parser error recovery** — `parse_recover(tokens) -> (Program, Vec<String>)` reports all parse errors, not just first
+- [x] P1 S  **Bitwise > 2^53 guard** — errors instead of silent truncation; hints at भारत.बड़ी
+- [x] P1 M  **Property-setter Nil-substitute footgun fix** — `Frame.on_nil_push_local`; setter without `फल यह` no longer clobbers caller's variable
+
+### Verified already working
+- [x] P1 XL **Async / await** — `प्रतीक्षा`, `सोओ(ms)`, `चलाओ(gen)`, `इकट्ठा(g1, g2, ...)`. Coroutines inferred from `प्रतीक्षा` in body — no `असंकालिक` keyword needed. Concurrency confirmed via out-of-order sleep test
+
+---
+
+## PHASE 21 — Advanced / Surpass (3–5+ Years)
 > Goal: Genuinely better than Python in specific areas
 
-- [ ] P4 XL **JIT compiler** — 10–100x speed for hot loops · LLVM or Cranelift backend
+- [~] P4 XL **JIT compiler** — arithmetic-only JIT landed in Phase 19; extending to more opcodes needs weeks
 - [ ] P4 XL **Full type inference** — Hindley-Milner, no annotations needed
 - [ ] P4 XL **Effect system** — track pure/IO/state at compile time
 - [ ] P4 XL **Self-hosting** — LIPI compiler written in LIPI
@@ -189,6 +219,8 @@
 - [ ] P4 XL **ML tensor library** — native tensors, autograd, training loop
 - [ ] P4 XL **Proof system** — formal verification (like Lean/Coq) using Nyaya logic
 - [ ] P4 XL **Dependent types** — values as types, total correctness
+- [ ] P2 M  **Mixins / multiple inheritance** — genuine outstanding language feature (not yet done)
+- [ ] P2 S  **Weak references** — cache-friendly refs without preventing GC
 
 ---
 
@@ -216,6 +248,13 @@
 | 2026-06-29 | Operator overloading is arithmetic-only (+ - * / %) | Dunder dispatch reuses the frame-call mechanism so the method's Return supplies the operator result; comparison/== would need to post-process the return into a Bool, which the frame model can't do inline. Deferred |
 | 2026-06-29 | Multiline collections via lexer bracket-depth, not parser | The lexer is line-based (emits Newline + INDENT/DEDENT per line); tracking ( [ { depth across lines and suppressing those tokens inside open brackets is a localized change that needs no parser rework |
 | 2026-06-29 | Match guards keep the subject on the stack across arms | A failed guard must be able to retry later arms, so the subject value can't be consumed until an arm fully matches (pattern + guard). Switched the मिलाओ compiler from a single last_jf to a pending_next jump list |
+| 2026-07-13 | `__बराबर__` overload via a `Frame.negate_return` flag | Revisited the 2026-06-29 "== deferred" decision. NotEq reuses the same dispatch as Eq by setting a per-frame flag that negates the Bool at Return time — avoids a second dunder for `!=` |
+| 2026-07-13 | Property-setter Nil is safe now — new `Frame.on_nil_push_local` | The old `फल यह` requirement was a silent-corruption footgun. On Return, if the setter frame returned Nil, we push the current binding of `यह` from the frame instead of Nil, so the caller's variable stays intact |
+| 2026-07-13 | Slice assignment splices for step=1, requires exact-length otherwise | Matches Python. Length-changing splice only makes sense contiguously; strided assignment on a mismatched RHS would silently drop or duplicate |
+| 2026-07-13 | Class-method decorators via a `__cls_deco_<Class>_<method>__` global | MethodCall dispatch checks per-class in the parent chain before the FuncDef lookup — child classes automatically inherit the wrapped closure |
+| 2026-07-13 | `मूल्यांकन(src)` wraps `src` as `__eval_result__ है (src)` | Reusing the compiler+VM keeps eval consistent with the rest of the language. Cleaning `__eval_result__` from the caller's globals hides the wrapper |
+| 2026-07-13 | Async/await already worked via existing generators + event loop | No `असंकालिक` keyword added — a function that uses `प्रतीक्षा` is implicitly a coroutine. `चलाओ()` runs one, `इकट्ठा()` runs many concurrently. Verified with an out-of-order sleep test |
+| 2026-07-13 | Parser error recovery via `parse_recover(tokens) -> (Program, Vec<String>)` | Statement-boundary sync after each error (advance until Newline/Dedent at bracket-depth 0). Doesn't affect normal `parse()` — recovery is a separate entry point |
 
 ---
 

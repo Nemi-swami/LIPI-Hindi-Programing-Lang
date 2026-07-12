@@ -1667,6 +1667,50 @@ and VM ignore them, `.libc` format is untouched. Zero runtime cost.
 
 ---
 
+## Phase 20 — Cleanup batch (2026-07-13)
+
+Landed 60/60 regression-clean, released binary reinstalled to `C:\Users\Nemi\AppData\Local\LIPI\bin\lipi.exe`.
+
+### Language additions
+- `;` acts as a statement separator (lexer emits Newline)
+- Scientific notation `1e3`, `1.5e-2`, `2E+5`
+- Hex / octal / binary literals `0xFF` / `0o77` / `0b1011` (with `_` separators)
+- Block comments `।।…।।` span multiple lines (lexer preprocessor)
+- `__बराबर__(अन्य)` overload — both `==` and `!=` route through it (`!=` uses `Frame.negate_return`)
+- Slice assignment `सूची[a:b:c] है [...]` — new opcode `SetSlice` (tag 0x4D), List-only; step=1 splices with length change, step≠1 requires exact match
+- Class-method decorators `@dec विधि x() in वर्ग` — decorator closure stored at `__cls_deco_<Class>_<method>__`; MethodCall dispatch checks per-class-in-chain before FuncDef lookup so subclass inheritance flows through parent's wrapped closure
+- `*args` in lambda param list — `लाम्डा(*नाम): ...` packs extras into a List; closure-Call path + `call_closure_value` both honor vararg
+
+### New builtins (no import needed)
+| Function | Behaviour |
+|----------|-----------|
+| `है_उदाहरण(obj, "वर्ग")` | Bool — is `obj` an Instance of that class? |
+| `विशेषताएँ(obj)` | Instance/Dict → sorted list of field/key names |
+| `वर्ग_का(obj)` | Instance → class name Str; else `प्रकार()` |
+| `विधियाँ_का(cls_or_obj)` | List of method names on the class (special-case in Call opcode; needs VM access) |
+| `चलाओ_कोड(src)` | Python-like `exec` — compile+run source string in current VM globals; prints to stdout; returns Nil |
+| `मूल्यांकन(src)` | Python-like `eval` — evaluates a single expression string, returns its value |
+
+### Runtime/tooling fixes
+- Parse/runtime errors now exit non-zero (`main.rs run()` calls `std::process::exit(1)`)
+- Parser error recovery: new `parser::parse_recover(tokens) -> (Program, Vec<String>)` used by `main.rs` — reports ALL parse errors, not just the first
+- Bitwise ops error if `|val| > 2^53` instead of silently truncating — use `भारत.बड़ी` for arbitrary precision
+- Property-setter footgun: if `__सेट_<f>__` returns Nil (missing `फल यह`), the setter's mutated `यह` local is substituted instead of clobbering the caller's variable. New `Frame.on_nil_push_local: Option<String>` honored by `Opcode::Return`
+
+### Async — status confirmed
+Async/await ALREADY WORKS. `प्रतीक्षा`, `सोओ(ms)`, `चलाओ(gen)`, `इकट्ठा(g1, g2, ...)` — no `असंकालिक` keyword needed; a function using `प्रतीक्षा` is implicitly a coroutine. Verified with a 100ms/50ms two-task test — out-of-order completion confirms real concurrency.
+
+### New opcode tag
+`TAG_SET_SLICE = 0x4D` — `.libc` serializer bumped. Loader still accepts older versions.
+
+### Design choices worth remembering
+- Str+List concat still errors — must use `वाक्य(list)` explicitly (unchanged)
+- Bool+Bool arithmetic still errors — use `पूर्णांक(bool)` explicitly (unchanged)
+- Native (non-thrown) errors are plain Str; only user-thrown `त्रुटि` instances have `.संदेश` (unchanged)
+- Cross-platform HTTPS remains blocked by the pure-Rust rule (rustls would fix; not adopted)
+
+---
+
 ## Environment notes
 
 - **Project path:** `D:\Projects\lipi-lang`

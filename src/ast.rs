@@ -47,6 +47,15 @@ pub enum Stmt {
     /// name[idx] है val  — index assignment (Phase 5)
     IndexAssign { obj: String, idx: Expr, val: Expr },
 
+    /// name[start:end:step] है val  — slice assignment (Phase 20, list only)
+    SliceAssign {
+        obj: String,
+        start: Option<Expr>,
+        end: Option<Expr>,
+        step: Option<Expr>,
+        val: Expr,
+    },
+
     /// वर्ग name[(parent)]: [methods]  — class definition (Phase 6/9).
     /// is_abstract (Phase 17): `सार वर्ग` — cannot be instantiated directly.
     Varg { name: String, parent: Option<String>, methods: Vec<Stmt>, is_abstract: bool },
@@ -218,7 +227,7 @@ pub enum Expr {
     Attr { obj: Box<Expr>, field: String },
 
     /// लाम्डा(x, y): expr  — anonymous function (Phase 10)
-    Lambda { params: Vec<String>, body: Vec<Stmt> },
+    Lambda { params: Vec<String>, vararg: Option<String>, body: Vec<Stmt> },
 
     /// यदि cond तो a अन्यथा b  — ternary expression (Phase 12)
     Ternary { condition: Box<Expr>, then_val: Box<Expr>, else_val: Box<Expr> },

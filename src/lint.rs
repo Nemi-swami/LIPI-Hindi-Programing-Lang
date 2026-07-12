@@ -275,6 +275,13 @@ fn shallow_reads(body: &[Stmt], _depth: usize, out: &mut Vec<(String, usize)>) {
                 push(value_idents(idx), out);
                 push(value_idents(val), out);
             }
+            Stmt::SliceAssign { obj, start, end, step, val } => {
+                out.push((obj.clone(), line));
+                if let Some(e) = start { push(value_idents(e), out); }
+                if let Some(e) = end { push(value_idents(e), out); }
+                if let Some(e) = step { push(value_idents(e), out); }
+                push(value_idents(val), out);
+            }
             Stmt::AttrAssign { obj, val, .. } => {
                 out.push((obj.clone(), line));
                 push(value_idents(val), out);
@@ -325,6 +332,13 @@ fn deep_reads_stmt(stmt: &Stmt, out: &mut HashSet<String>) {
         Stmt::MultiAssign { values, .. } => for v in values { all_names(v, out); },
         Stmt::ChainAssign { value, .. } => all_names(value, out),
         Stmt::IndexAssign { obj, idx, val } => { out.insert(obj.clone()); all_names(idx, out); all_names(val, out); }
+        Stmt::SliceAssign { obj, start, end, step, val } => {
+            out.insert(obj.clone());
+            if let Some(e) = start { all_names(e, out); }
+            if let Some(e) = end { all_names(e, out); }
+            if let Some(e) = step { all_names(e, out); }
+            all_names(val, out);
+        }
         Stmt::AttrAssign { obj, val, .. } => { out.insert(obj.clone()); all_names(val, out); }
         Stmt::KeeLiye { iter, body, .. } => { all_names(iter, out); deep_reads_block(body, out); }
         Stmt::BarKaro { count, body } => { all_names(count, out); deep_reads_block(body, out); }
@@ -483,6 +497,12 @@ fn for_each_lambda_in_stmt(stmt: &Stmt, f: &mut dyn FnMut(&[String], &[Stmt])) {
         Stmt::MultiAssign { values, .. } => for v in values { visit_expr(v, f); },
         Stmt::ChainAssign { value, .. } => visit_expr(value, f),
         Stmt::IndexAssign { idx, val, .. } => { visit_expr(idx, f); visit_expr(val, f); }
+        Stmt::SliceAssign { start, end, step, val, .. } => {
+            if let Some(e) = start { visit_expr(e, f); }
+            if let Some(e) = end { visit_expr(e, f); }
+            if let Some(e) = step { visit_expr(e, f); }
+            visit_expr(val, f);
+        }
         Stmt::AttrAssign { val, .. } => visit_expr(val, f),
         Stmt::KeeLiye { iter, .. } => visit_expr(iter, f),
         Stmt::BarKaro { count, .. } => visit_expr(count, f),
@@ -496,7 +516,7 @@ fn for_each_lambda_in_stmt(stmt: &Stmt, f: &mut dyn FnMut(&[String], &[Stmt])) {
 
 fn lambdas_in_expr(e: &Expr, f: &mut dyn FnMut(&[String], &[Stmt])) {
     match e {
-        Expr::Lambda { params, body } => f(params, body),
+        Expr::Lambda { params, body, .. } => f(params, body),
         Expr::Binary { left, right, .. } | Expr::Compare { left, right, .. } => { lambdas_in_expr(left, f); lambdas_in_expr(right, f); }
         Expr::Call { args, .. } => for a in args { lambdas_in_expr(a, f); },
         Expr::CallKw { args, kwargs, .. } => { for a in args { lambdas_in_expr(a, f); } for (_, v) in kwargs { lambdas_in_expr(v, f); } }

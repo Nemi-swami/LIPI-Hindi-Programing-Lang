@@ -147,6 +147,52 @@ pub fn normalize_devanagari(src: &str) -> String {
 
 /// Replace `"""..."""` triple-quoted strings with escaped single-line strings.
 /// This runs as a pre-pass before line-by-line tokenization.
+/// Block comments `।।…।।` may span multiple lines. This pre-pass strips them
+/// while preserving `\n` characters so downstream line numbers stay accurate.
+/// Runs AFTER `preprocess_triple_quotes` so that `"..."` never contains a raw
+/// newline — string-literal tracking here only needs to handle single-line
+/// double-quoted spans with backslash escapes.
+fn preprocess_block_comments(src: &str) -> String {
+    let chars: Vec<char> = src.chars().collect();
+    let mut out = String::with_capacity(src.len());
+    let mut i = 0;
+    let mut in_str = false;
+    let mut escape = false;
+    while i < chars.len() {
+        let c = chars[i];
+        if in_str {
+            out.push(c);
+            if escape { escape = false; }
+            else if c == '\\' { escape = true; }
+            else if c == '"' { in_str = false; }
+            i += 1;
+            continue;
+        }
+        if c == '"' {
+            in_str = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        // Block-comment opener `।।` outside a string
+        if c == '।' && i + 1 < chars.len() && chars[i+1] == '।' {
+            i += 2;
+            while i < chars.len() {
+                if chars[i] == '।' && i + 1 < chars.len() && chars[i+1] == '।' {
+                    i += 2;
+                    break;
+                }
+                if chars[i] == '\n' { out.push('\n'); } // preserve line count
+                i += 1;
+            }
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
 fn preprocess_triple_quotes(src: &str) -> String {
     let mut out = String::with_capacity(src.len());
     let mut chars = src.chars().peekable();
@@ -205,6 +251,7 @@ pub fn tokenize(src: &str) -> Vec<Token> {
     // base+nukta equivalents lex identically (Phase 17).
     let normalized = normalize_devanagari(src.trim_start_matches('\u{feff}'));
     let preprocessed = preprocess_triple_quotes(&normalized);
+    let preprocessed = preprocess_block_comments(&preprocessed);
     let src = preprocessed.as_str();
     let mut out: Vec<Token> = Vec::new();
     let mut indent_stack: Vec<usize> = vec![0];
@@ -328,11 +375,44 @@ fn lex_line(src: &str, line: usize) -> Vec<Token> {
             continue;
         }
 
+        // Radix literals: 0x.. hex, 0o.. octal, 0b.. binary (Phase 19+ — lights up bitmask work).
+        if c == '0' && pos + 1 < chars.len() {
+            let nxt = chars[pos+1];
+            let (radix, valid): (u32, fn(char) -> bool) = match nxt {
+                'x' | 'X' => (16, |c: char| c.is_ascii_hexdigit()),
+                'o' | 'O' => (8,  |c: char| ('0'..='7').contains(&c)),
+                'b' | 'B' => (2,  |c: char| c == '0' || c == '1'),
+                _ => (0, |_| false),
+            };
+            if radix != 0 && pos + 2 < chars.len() && valid(chars[pos+2]) {
+                let digits_start = pos + 2;
+                let mut p = digits_start;
+                while p < chars.len() && (valid(chars[p]) || chars[p] == '_') { p += 1; }
+                let raw: String = chars[digits_start..p].iter().filter(|&&c| c != '_').collect();
+                let n = i64::from_str_radix(&raw, radix)
+                    .map(|n| n as f64)
+                    .unwrap_or(f64::NAN);
+                pos = p;
+                tokens.push(Token { kind: TokenKind::Number(n), line });
+                continue;
+            }
+        }
+
         // Number (ASCII or Devanagari digits)
         if c.is_ascii_digit() || is_dev_digit(c) {
             let start = pos;
             while pos < chars.len() && (chars[pos].is_ascii_digit() || is_dev_digit(chars[pos]) || chars[pos] == '.') {
                 pos += 1;
+            }
+            // Scientific notation: [eE][+-]?digit+   (only consumed when followed by a digit,
+            // so identifiers like `1eleven` or `3embed` stay a Number+Identifier pair.)
+            if pos < chars.len() && (chars[pos] == 'e' || chars[pos] == 'E') {
+                let mut look = pos + 1;
+                if look < chars.len() && (chars[look] == '+' || chars[look] == '-') { look += 1; }
+                if look < chars.len() && chars[look].is_ascii_digit() {
+                    pos = look;
+                    while pos < chars.len() && chars[pos].is_ascii_digit() { pos += 1; }
+                }
             }
             // Look for lakh / crore suffix
             let mut tmp = pos;
@@ -426,6 +506,7 @@ fn lex_line(src: &str, line: usize) -> Vec<Token> {
             '^' => { pos += 1; TokenKind::BitXor }
             '~' => { pos += 1; TokenKind::BitNot }
             '@' => { pos += 1; TokenKind::At }
+            ';' => { pos += 1; TokenKind::Newline }
             _ => { pos += 1; TokenKind::Unknown(c) }
         };
         tokens.push(Token { kind, line });

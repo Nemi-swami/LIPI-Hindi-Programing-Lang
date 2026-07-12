@@ -121,6 +121,33 @@ pub fn parse(tokens: Vec<Token>) -> Result<Program, String> {
     p.program()
 }
 
+pub fn parse_recover(tokens: Vec<Token>) -> (Program, Vec<String>) {
+    let mut p = Parser { tokens, pos: 0 };
+    let mut stmts = Vec::new();
+    let mut errors = Vec::new();
+    p.skip_newlines();
+    while !p.at_eof() {
+        match p.statement() {
+            Ok(s) => stmts.push(s),
+            Err(e) => {
+                errors.push(e);
+                let mut depth: i32 = 0;
+                while !p.at_eof() {
+                    match p.peek().kind {
+                        TokenKind::Newline | TokenKind::Dedent if depth <= 0 => break,
+                        TokenKind::Indent | TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+                        TokenKind::Dedent | TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => depth -= 1,
+                        _ => {}
+                    }
+                    p.advance();
+                }
+            }
+        }
+        p.skip_newlines();
+    }
+    (stmts, errors)
+}
+
 impl Parser {
     fn program(&mut self) -> Result<Program, String> {
         let mut stmts = Vec::new();
@@ -250,20 +277,55 @@ impl Parser {
                 Ok(Stmt::KeeLiye { var: name, iter, body })
             }
             TokenKind::LBracket => {
-                // name[idx] है val  — index assignment
+                // name[idx] है val   → IndexAssign
+                // name[a:b:c] है val → SliceAssign
+                // name[expr]         → bare index expression (statement)
                 self.advance();
-                let idx = self.expression()?;
+                // A bracket that starts with `:` is a slice with omitted start.
+                let start = if self.check_kind(TokenKind::Colon) {
+                    None
+                } else {
+                    Some(self.expression()?)
+                };
+                if self.check_kind(TokenKind::RBracket) {
+                    // Plain index — no colon seen. `start` must be Some here.
+                    let idx = start.unwrap();
+                    self.advance();
+                    if self.check_kind(TokenKind::Hai) {
+                        self.advance();
+                        let val = self.expression()?;
+                        return Ok(Stmt::IndexAssign { obj: name, idx, val });
+                    }
+                    return Ok(Stmt::ExprStmt(Expr::Index {
+                        obj: Box::new(Expr::Ident(name)),
+                        idx: Box::new(idx),
+                    }));
+                }
+                // Slice path — consume the first `:`, then parse end / step.
+                self.expect_kind(TokenKind::Colon)?;
+                let end = if self.check_kind(TokenKind::Colon) || self.check_kind(TokenKind::RBracket) {
+                    None
+                } else {
+                    Some(self.expression()?)
+                };
+                let step = if self.check_kind(TokenKind::Colon) {
+                    self.advance();
+                    if self.check_kind(TokenKind::RBracket) { None } else { Some(self.expression()?) }
+                } else {
+                    None
+                };
                 self.expect_kind(TokenKind::RBracket)?;
                 if self.check_kind(TokenKind::Hai) {
                     self.advance();
                     let val = self.expression()?;
-                    Ok(Stmt::IndexAssign { obj: name, idx, val })
-                } else {
-                    Ok(Stmt::ExprStmt(Expr::Index {
-                        obj: Box::new(Expr::Ident(name)),
-                        idx: Box::new(idx),
-                    }))
+                    return Ok(Stmt::SliceAssign { obj: name, start, end, step, val });
                 }
+                Ok(Stmt::ExprStmt(Expr::Slice {
+                    obj: Box::new(Expr::Ident(name)),
+                    start: start.map(Box::new),
+                    end: end.map(Box::new),
+                    step: step.map(Box::new),
+                }))
             }
             TokenKind::Dot => {
                 // name.field है val  — attribute assignment
@@ -989,8 +1051,14 @@ impl Parser {
             TokenKind::Lambda => {
                 self.expect_kind(TokenKind::LParen)?;
                 let mut params = Vec::new();
+                let mut vararg: Option<String> = None;
                 if !self.check_kind(TokenKind::RParen) {
                     loop {
+                        if self.check_kind(TokenKind::Star) {
+                            self.advance();
+                            vararg = Some(self.expect_ident()?);
+                            break;
+                        }
                         params.push(self.expect_ident()?);
                         if !self.check_kind(TokenKind::Comma) { break; }
                         self.advance();
@@ -998,15 +1066,13 @@ impl Parser {
                 }
                 self.expect_kind(TokenKind::RParen)?;
                 self.expect_kind(TokenKind::Colon)?;
-                // Single-expression body on same line → wrap as फल
                 let body = if matches!(self.peek().kind, TokenKind::Newline | TokenKind::Eof) {
-                    // Multi-line body (indented block)
                     self.skip_newlines();
                     self.block()?
                 } else {
                     vec![Stmt::Fal(self.expression()?)]
                 };
-                Ok(Expr::Lambda { params, body })
+                Ok(Expr::Lambda { params, vararg, body })
             }
 
             // सूची literal  [e1, e2, ...]  — elements may start with * (spread, Phase 17)

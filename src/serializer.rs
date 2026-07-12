@@ -99,6 +99,7 @@ const TAG_ITER_NEXT:      u8 = 0x49; // + str container_var + str index_var — 
 const TAG_YIELD:          u8 = 0x4A; // no payload — उत्पन्न (Phase 18 generators)
 const TAG_ITER_STEP:      u8 = 0x4B; // + str loop_var + str container_var + str idx_var (Phase 18)
 const TAG_METHOD_CALL_KW: u8 = 0x4C; // + str method + u8 pos_argc + u8 kw_count + str* kwnames (Phase 18)
+const TAG_SET_SLICE:      u8 = 0x4D;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -384,6 +385,7 @@ fn encode_op(buf: &mut Vec<u8>, op: &Opcode) -> Result<(), String> {
             write_u8(buf, kwnames.len() as u8);
             for n in kwnames { write_str(buf, n); }
         }
+        Opcode::SetSlice => write_u8(buf, TAG_SET_SLICE),
     }
     Ok(())
 }
@@ -558,6 +560,7 @@ fn decode_op(data: &[u8], pos: &mut usize) -> Result<Opcode, String> {
             for _ in 0..kw_count { kwnames.push(read_str(data, pos)?); }
             Opcode::MethodCallKw { method, pos_argc, kwnames }
         }
+        TAG_SET_SLICE => Opcode::SetSlice,
 
         other => return Err(format!("अज्ञात opcode tag: 0x{:02X}", other)),
     })

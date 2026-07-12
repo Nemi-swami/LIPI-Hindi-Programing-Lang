@@ -286,7 +286,8 @@ impl Interpreter {
                 Ok(None)
             }
 
-            // Phase 5 stub — tree-walk path
+            Stmt::SliceAssign { .. } => Ok(None),
+
             Stmt::IndexAssign { obj, idx, val } => {
                 let idx_val = self.eval(idx)?;
                 let new_val = self.eval(val)?;
@@ -721,7 +722,7 @@ pub fn slice_value(obj: Value, start: Value, end: Value, step: Value) -> Result<
 
 /// Python slice index resolution: negative values count from the end,
 /// out-of-range values clamp, never error.
-fn slice_indices(len: i64, start: Option<i64>, end: Option<i64>, step: i64) -> Vec<i64> {
+pub(crate) fn slice_indices(len: i64, start: Option<i64>, end: Option<i64>, step: i64) -> Vec<i64> {
     let norm = |v: i64| if v < 0 { v + len } else { v };
     let mut out = Vec::new();
     if step > 0 {

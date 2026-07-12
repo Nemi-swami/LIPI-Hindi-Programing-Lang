@@ -52,20 +52,22 @@ use std::io::{self, BufRead, Write};
 
 fn run(source: &str) {
     let tokens = lexer::tokenize(source);
-    match parser::parse(tokens) {
-        Ok(stmts) => {
-            let program = compiler::Compiler::compile_program(&stmts);
-            let mut vm = lvm::LVM::new();
-            vm.set_jit(jit::compile_program(&stmts));
-            if let Err(e) = vm.run(&program) {
-                eprintln!("LVM त्रुटि: {e}");
-                show_error_line(source, &e);
-            }
-        }
-        Err(e) => {
+    let (stmts, errors) = parser::parse_recover(tokens);
+    if !errors.is_empty() {
+        for e in &errors {
             eprintln!("व्याकरण त्रुटि: {e}");
-            show_error_line(source, &e);
+            show_error_line(source, e);
         }
+        eprintln!("कुल {} व्याकरण त्रुटियाँ मिलीं", errors.len());
+        std::process::exit(1);
+    }
+    let program = compiler::Compiler::compile_program(&stmts);
+    let mut vm = lvm::LVM::new();
+    vm.set_jit(jit::compile_program(&stmts));
+    if let Err(e) = vm.run(&program) {
+        eprintln!("LVM त्रुटि: {e}");
+        show_error_line(source, &e);
+        std::process::exit(1);
     }
 }
 
